@@ -4,9 +4,9 @@ import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent } fr
 import { MessageBubble } from './message-bubble';
 import { Send, Bot, PlusCircle, Loader2, AlertCircle, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils'; 
+import { cn } from '@/lib/utils'; // Assuming you have a standard cn utility
 
-// Define types for clarity (keeping previous definitions for context)
+// Define types for clarity
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -74,7 +74,8 @@ export default function ChatInterface() {
     if (existingIndex > -1) {
         title = currentList[existingIndex].title; 
     } else if (currentMessages.length > 0) {
-        const firstMessage = currentMessages[0].content;
+        // Title logic: uses the first message content if the chat is new.
+        const firstMessage = currentMessages[0].content.trim(); 
         title = firstMessage.length > 30 ? firstMessage.slice(0, 30) + '...' : firstMessage;
     }
     
@@ -83,7 +84,7 @@ export default function ChatInterface() {
       title: title,
       model: modelId,
       color: modelColor,
-      date: Date.now() 
+      date: Date.now() // Used to sort to the top
     };
 
     if (existingIndex > -1) {
@@ -195,6 +196,7 @@ export default function ChatInterface() {
 
   // --- Event Handlers ---
 
+  // Handle Shift+Enter for newline
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -202,13 +204,20 @@ export default function ChatInterface() {
     }
   };
 
-  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
+const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedModelId || !input.trim() || isLoading) return;
 
-    const userText = input.trim();
+    // Use input directly
+    let userText = input; 
     setInput(''); 
     setError(null);
+
+    userText = userText.replace(/\n(?!\n)/g, '\n\n'); 
+    
+    // Now, ensure we clean up extra whitespace that might interfere with rendering
+    userText = userText.trim();
+
 
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: userText };
     const messagesToSend = [...messages, userMsg];
@@ -342,10 +351,9 @@ export default function ChatInterface() {
           </motion.select>
         </header>
 
-        {/* Messages Container (MODIFIED FOR CENTERING) */}
+        {/* Messages Container (CENTERED WRAPPER) */}
         <div className="flex-1 overflow-y-auto scroll-smooth">
-          {/* Centered Wrapper for all messages */}
-          <div className="max-w-4xl mx-auto px-6 py-6 space-y-4"> {/* max-w-4xl and mx-auto are key */}
+          <div className="max-w-4xl mx-auto px-6 py-6 space-y-4"> {/* Centered content area */}
             
             {messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center opacity-50 pt-20">
@@ -356,7 +364,6 @@ export default function ChatInterface() {
             
             <AnimatePresence>
               {messages.map((m) => (
-                // MessageBubble now lives inside the centered container
                 <MessageBubble 
                     key={m.id} 
                     role={m.role} 
@@ -380,10 +387,10 @@ export default function ChatInterface() {
               </motion.div>
             )}
 
-          </div> {/* End of Centered Wrapper */}
+          </div> 
         </div>
 
-        {/* Input Area */}
+        {/* Input Area (Centered and matches max-w-4xl) */}
         <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
           <motion.form 
             initial={{ opacity: 0, y: 10 }}
