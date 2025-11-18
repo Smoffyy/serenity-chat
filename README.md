@@ -1,3 +1,11 @@
+# Serenity Chat (UI)
+
+This project aims to make a very aestetically pleasing front end UI for users using an openai-compatable API.
+
+
+
+
+### Next.js stuff
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
