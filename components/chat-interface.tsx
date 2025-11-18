@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent } from 'react';
-// ASSUMING you have created this component in the previous steps
-import { MessageBubble } from './message-bubble'; 
+import { MessageBubble } from './message-bubble';
 import { Send, Bot, PlusCircle, Loader2, AlertCircle, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils'; 
 
-// Define types for clarity
+// Define types for clarity (keeping previous definitions for context)
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -19,22 +18,21 @@ interface ChatMetadata {
   title: string;
   model: string;
   color: string;
-  date: number; // Used for sorting
+  date: number; 
 }
 interface ModelData {
     id: string;
     color: string;
 }
 
-// Simple color generator for the AI icon
 const generateRandomColor = () => {
   const colors = [
-    '#EF4444', // Red
-    '#3B82F6', // Blue
-    '#10B981', // Green
-    '#F59E0B', // Amber
-    '#8B5CF6', // Violet
-    '#EC4899', // Pink
+    '#EF4444', 
+    '#3B82F6', 
+    '#10B981', 
+    '#F59E0B', 
+    '#8B5CF6', 
+    '#EC4899', 
   ];
   return colors[Math.floor(Math.random() * colors.length)];
 };
@@ -58,7 +56,6 @@ export default function ChatInterface() {
 
   const getChatMetadata = useCallback((): ChatMetadata[] => {
     try {
-      // Sort by date descending
       const list = JSON.parse(localStorage.getItem('all_chats') || '[]') as ChatMetadata[];
       return list.sort((a, b) => b.date - a.date);
     } catch (e) {
@@ -67,22 +64,16 @@ export default function ChatInterface() {
     }
   }, []);
 
-  // UPDATE: This logic is now responsible for moving the chat to the top 
-  // and only setting the title on the very first message.
   const saveHistory = useCallback((currentMessages: Message[], modelId: string, modelColor: string) => {
     localStorage.setItem(`chat_${chatId}`, JSON.stringify(currentMessages));
     
-    // Update chat list metadata
     const currentList = getChatMetadata();
     const existingIndex = currentList.findIndex(c => c.id === chatId);
     
-    // Determine title: Use the first message content if the conversation has just 1 message (the user's),
-    // otherwise retrieve the existing title or default.
     let title: string = 'New Chat';
     if (existingIndex > -1) {
-        title = currentList[existingIndex].title; // Keep the existing title
+        title = currentList[existingIndex].title; 
     } else if (currentMessages.length > 0) {
-        // If it's a brand new chat, use the first message.
         const firstMessage = currentMessages[0].content;
         title = firstMessage.length > 30 ? firstMessage.slice(0, 30) + '...' : firstMessage;
     }
@@ -92,22 +83,20 @@ export default function ChatInterface() {
       title: title,
       model: modelId,
       color: modelColor,
-      date: Date.now() // Set the current timestamp to push it to the top
+      date: Date.now() 
     };
 
     if (existingIndex > -1) {
-      currentList[existingIndex] = newMetadata; // Update existing chat (primarily the date)
+      currentList[existingIndex] = newMetadata; 
     } else {
-      currentList.unshift(newMetadata); // Add new chat to top
+      currentList.unshift(newMetadata); 
     }
     
-    // Re-save the sorted list (the utility function does the sorting)
     localStorage.setItem('all_chats', JSON.stringify(currentList)); 
-    setChatList(currentList.sort((a, b) => b.date - a.date)); // Update state with sorted list
+    setChatList(currentList.sort((a, b) => b.date - a.date)); 
   }, [chatId, getChatMetadata]);
   
   const loadChat = useCallback((id: string, modelId: string, color: string) => {
-    // Save current chat before switching
     if (messages.length > 0) {
         saveHistory(messages, selectedModelId, selectedModelColor);
     }
@@ -132,7 +121,6 @@ export default function ChatInterface() {
   }, [messages, selectedModelId, selectedModelColor, saveHistory]);
 
   const startNewChat = () => {
-    // Save current chat before starting new one
     if (messages.length > 0) {
         saveHistory(messages, selectedModelId, selectedModelColor);
     }
@@ -141,7 +129,6 @@ export default function ChatInterface() {
     setMessages([]);
     setInput('');
     setError(null);
-    // If models are loaded, default to the first one
     if (models.length > 0) {
         setSelectedModelId(models[0].id);
         setSelectedModelColor(models[0].color);
@@ -150,12 +137,9 @@ export default function ChatInterface() {
 
   // --- Effects ---
 
-  // Initial Load (Models & Chat List) - Runs ONLY on initial mount
   useEffect(() => {
-    // 1. Load chat list
     setChatList(getChatMetadata());
 
-    // 2. Define and run the fetch function
     const fetchModels = async () => {
       try {
         const res = await fetch('/api/models');
@@ -196,7 +180,6 @@ export default function ChatInterface() {
     fetchModels();
   }, []); 
 
-  // Handle Model Dropdown Change (Updates selectedModelColor when modelId changes)
   useEffect(() => {
     const model = models.find(m => m.id === selectedModelId);
     if (model) {
@@ -205,7 +188,6 @@ export default function ChatInterface() {
   }, [selectedModelId, models]);
 
 
-  // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -213,7 +195,6 @@ export default function ChatInterface() {
 
   // --- Event Handlers ---
 
-  // NEW: Handle Shift+Enter for newline
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -229,13 +210,11 @@ export default function ChatInterface() {
     setInput(''); 
     setError(null);
 
-    // 1. Add User Message Optimistically
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: userText };
     const messagesToSend = [...messages, userMsg];
     setMessages(messagesToSend);
     setIsLoading(true);
 
-    // 2. Create Placeholder for AI Response (with "Thinking..." message)
     const aiMsgId = (Date.now() + 1).toString();
     const aiMsg: Message = { id: aiMsgId, role: 'assistant', content: "Thinking..." };
     setMessages(prev => [...prev, aiMsg]);
@@ -257,7 +236,6 @@ export default function ChatInterface() {
       }
       if (!response.body) throw new Error("No response body");
 
-      // 3. Read the Stream Manually
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let accumulatedContent = '';
@@ -269,7 +247,6 @@ export default function ChatInterface() {
         const chunk = decoder.decode(value, { stream: true });
         accumulatedContent += chunk;
 
-        // Update the specific AI message in the state
         setMessages(currentMsgs => 
           currentMsgs.map(msg => 
             msg.id === aiMsgId 
@@ -279,14 +256,12 @@ export default function ChatInterface() {
         );
       }
 
-      // 4. Stream Finished - Save History
       const finalMessages = [...messagesToSend, { ...aiMsg, content: accumulatedContent, modelColor: selectedModelColor }];
-      setMessages(finalMessages); // Ensure the state has the final, completed message
-      saveHistory(finalMessages, selectedModelId, selectedModelColor); // Pass final messages for title check
+      setMessages(finalMessages); 
+      saveHistory(finalMessages, selectedModelId, selectedModelColor); 
 
     } catch (err: any) {
       setError(err.message || "Something went wrong");
-      // Remove the empty AI placeholder if it failed completely
       setMessages(prev => prev.filter(m => m.id !== aiMsgId && m.id !== userMsg.id));
     } finally {
       setIsLoading(false);
@@ -351,16 +326,7 @@ export default function ChatInterface() {
       <div className="flex-1 flex flex-col relative">
         
         {/* Header */}
-        <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between px-6 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-10">
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-2"
-          >
-            <div className={`w-2.5 h-2.5 rounded-full ${isLoading ? 'bg-amber-500 animate-pulse' : 'bg-green-500'}`} />
-            <span className="font-semibold text-lg">Local AI</span>
-          </motion.div>
-          
+        <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-end px-6 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-10">
           <motion.select 
             initial={{ opacity: 0, y: -5 }}
             animate={{ opacity: 1, y: 0 }}
@@ -376,41 +342,45 @@ export default function ChatInterface() {
           </motion.select>
         </header>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 scroll-smooth">
-          {messages.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center opacity-50">
-              <Bot size={48} className="mb-4 text-zinc-300" />
-              <p className="text-lg font-medium">Select a model and start chatting.</p>
-            </div>
-          )}
-          
-          <AnimatePresence>
-            {messages.map((m) => (
-              <MessageBubble 
-                  key={m.id} 
-                  role={m.role} 
-                  content={m.content} 
-                  modelColor={m.modelColor || selectedModelColor} 
-              />
-            ))}
-          </AnimatePresence>
-          
-          {/* Scroll target */}
-          <div ref={messagesEndRef} />
-          
-          {/* Error Banner */}
-          {error && (
-            <motion.div 
-                initial={{ opacity: 0, y: 10 }} 
-                animate={{ opacity: 1, y: 0 }}
-                className="flex justify-center p-4"
-            >
-              <div className="bg-red-100 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-2 text-sm max-w-md shadow-md">
-                <AlertCircle size={16} /> <span>{error}</span>
+        {/* Messages Container (MODIFIED FOR CENTERING) */}
+        <div className="flex-1 overflow-y-auto scroll-smooth">
+          {/* Centered Wrapper for all messages */}
+          <div className="max-w-4xl mx-auto px-6 py-6 space-y-4"> {/* max-w-4xl and mx-auto are key */}
+            
+            {messages.length === 0 && (
+              <div className="h-full flex flex-col items-center justify-center opacity-50 pt-20">
+                <Bot size={48} className="mb-4 text-zinc-300" />
+                <p className="text-lg font-medium">Select a model and start chatting.</p>
               </div>
-            </motion.div>
-          )}
+            )}
+            
+            <AnimatePresence>
+              {messages.map((m) => (
+                // MessageBubble now lives inside the centered container
+                <MessageBubble 
+                    key={m.id} 
+                    role={m.role} 
+                    content={m.content} 
+                    modelColor={m.modelColor || selectedModelColor} 
+                />
+              ))}
+            </AnimatePresence>
+            
+            <div ref={messagesEndRef} />
+            
+            {error && (
+              <motion.div 
+                  initial={{ opacity: 0, y: 10 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex justify-center p-4"
+              >
+                <div className="bg-red-100 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-2 text-sm max-w-md shadow-md">
+                  <AlertCircle size={16} /> <span>{error}</span>
+                </div>
+              </motion.div>
+            )}
+
+          </div> {/* End of Centered Wrapper */}
         </div>
 
         {/* Input Area */}
@@ -425,9 +395,9 @@ export default function ChatInterface() {
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown} // NEW: Handler for Shift+Enter
+              onKeyDown={handleKeyDown} 
               placeholder="Send a message (Shift+Enter for new line)..."
-              rows={Math.min(10, input.split('\n').length)} // Dynamic rows
+              rows={Math.min(10, Math.max(1, input.split('\n').length))} 
               className="w-full bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-6 py-4 pr-14 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-xl dark:shadow-none text-base resize-none overflow-y-auto"
               disabled={isLoading || !selectedModelId}
             />
