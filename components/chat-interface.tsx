@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef, FormEvent, useCallback } from 'react';
-import { MessageBubble } from './message-bubble';
+import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent } from 'react';
+// ASSUMING you have created this component in the previous steps
+import { MessageBubble } from './message-bubble'; 
 import { Send, Bot, PlusCircle, Loader2, AlertCircle, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils'; // Assuming you have a standard cn utility
+import { cn } from '@/lib/utils';
 
 // Define types for clarity
 interface Message {
@@ -18,7 +19,7 @@ interface ChatMetadata {
   title: string;
   model: string;
   color: string;
-  date: number;
+  date: number; // Used for sorting
 }
 interface ModelData {
     id: string;
@@ -66,35 +67,49 @@ export default function ChatInterface() {
     }
   }, []);
 
-  const saveHistory = useCallback((currentMessages: Message[], title: string, modelId: string, modelColor: string) => {
+  // UPDATE: This logic is now responsible for moving the chat to the top 
+  // and only setting the title on the very first message.
+  const saveHistory = useCallback((currentMessages: Message[], modelId: string, modelColor: string) => {
     localStorage.setItem(`chat_${chatId}`, JSON.stringify(currentMessages));
     
     // Update chat list metadata
     const currentList = getChatMetadata();
     const existingIndex = currentList.findIndex(c => c.id === chatId);
+    
+    // Determine title: Use the first message content if the conversation has just 1 message (the user's),
+    // otherwise retrieve the existing title or default.
+    let title: string = 'New Chat';
+    if (existingIndex > -1) {
+        title = currentList[existingIndex].title; // Keep the existing title
+    } else if (currentMessages.length > 0) {
+        // If it's a brand new chat, use the first message.
+        const firstMessage = currentMessages[0].content;
+        title = firstMessage.length > 30 ? firstMessage.slice(0, 30) + '...' : firstMessage;
+    }
+    
     const newMetadata: ChatMetadata = {
       id: chatId,
-      title: title || 'New Chat',
+      title: title,
       model: modelId,
       color: modelColor,
-      date: Date.now()
+      date: Date.now() // Set the current timestamp to push it to the top
     };
 
     if (existingIndex > -1) {
-      currentList[existingIndex] = newMetadata; // Update existing chat
+      currentList[existingIndex] = newMetadata; // Update existing chat (primarily the date)
     } else {
       currentList.unshift(newMetadata); // Add new chat to top
     }
+    
     // Re-save the sorted list (the utility function does the sorting)
     localStorage.setItem('all_chats', JSON.stringify(currentList)); 
-    setChatList(currentList);
+    setChatList(currentList.sort((a, b) => b.date - a.date)); // Update state with sorted list
   }, [chatId, getChatMetadata]);
   
   const loadChat = useCallback((id: string, modelId: string, color: string) => {
     // Save current chat before switching
     if (messages.length > 0) {
-        const title = messages[0].content.length > 30 ? messages[0].content.slice(0, 30) + '...' : messages[0].content;
-        saveHistory(messages, title, selectedModelId, selectedModelColor);
+        saveHistory(messages, selectedModelId, selectedModelColor);
     }
 
     setChatId(id);
@@ -119,8 +134,7 @@ export default function ChatInterface() {
   const startNewChat = () => {
     // Save current chat before starting new one
     if (messages.length > 0) {
-        const title = messages[0].content.length > 30 ? messages[0].content.slice(0, 30) + '...' : messages[0].content;
-        saveHistory(messages, title, selectedModelId, selectedModelColor);
+        saveHistory(messages, selectedModelId, selectedModelColor);
     }
     const newId = Date.now().toString();
     setChatId(newId);
@@ -136,8 +150,7 @@ export default function ChatInterface() {
 
   // --- Effects ---
 
-  // Initial Load (Models & Chat List) 
-  // FIX: Using an empty dependency array [] is the CRITICAL fix for the infinite loop
+  // Initial Load (Models & Chat List) - Runs ONLY on initial mount
   useEffect(() => {
     // 1. Load chat list
     setChatList(getChatMetadata());
@@ -148,7 +161,6 @@ export default function ChatInterface() {
         const res = await fetch('/api/models');
         
         if (!res.ok) {
-            // Read and throw the error message from the JSON response
             const errorData = await res.json();
             throw new Error(errorData.error || `Failed to fetch models with status: ${res.status}`);
         }
@@ -156,27 +168,22 @@ export default function ChatInterface() {
         const data = await res.json();
 
         if (data.data && data.data.length > 0) {
-          // Assign a random color to each model
           const coloredModels = data.data.map((m: any) => ({
               id: m.id,
               color: generateRandomColor(), 
           }));
           
-          // CRITICAL: setModels state update runs only on this initial render cycle
           setModels(coloredModels);
           
-          // Determine initial selected model and color
           let initialModel = coloredModels[0].id;
           let initialColor = coloredModels[0].color;
           
           const lastChat = getChatMetadata()[0];
           if (lastChat) {
-              // Load the last active chat/model if history exists
               loadChat(lastChat.id, lastChat.model, lastChat.color);
               return; 
           }
           
-          // Set initial model/color if no history was loaded
           setSelectedModelId(initialModel);
           setSelectedModelColor(initialColor);
         }
@@ -187,8 +194,6 @@ export default function ChatInterface() {
     };
     
     fetchModels();
-
-    // Empty array ensures this effect runs ONLY once on mount.
   }, []); 
 
   // Handle Model Dropdown Change (Updates selectedModelColor when modelId changes)
@@ -206,7 +211,15 @@ export default function ChatInterface() {
   }, [messages]);
 
 
-  // --- Submit Handler (Manual Streaming) ---
+  // --- Event Handlers ---
+
+  // NEW: Handle Shift+Enter for newline
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onSubmit(e as unknown as FormEvent<HTMLFormElement>);
+    }
+  };
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -267,9 +280,9 @@ export default function ChatInterface() {
       }
 
       // 4. Stream Finished - Save History
-      const title = userText.length > 30 ? userText.slice(0, 30) + '...' : userText;
       const finalMessages = [...messagesToSend, { ...aiMsg, content: accumulatedContent, modelColor: selectedModelColor }];
-      saveHistory(finalMessages, title, selectedModelId, selectedModelColor);
+      setMessages(finalMessages); // Ensure the state has the final, completed message
+      saveHistory(finalMessages, selectedModelId, selectedModelColor); // Pass final messages for title check
 
     } catch (err: any) {
       setError(err.message || "Something went wrong");
@@ -409,17 +422,19 @@ export default function ChatInterface() {
             onSubmit={onSubmit} 
             className="max-w-4xl mx-auto relative flex items-center"
           >
-            <input
+            <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Send a message..."
-              className="w-full bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-full px-6 py-4 pr-14 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-xl dark:shadow-none text-base"
+              onKeyDown={handleKeyDown} // NEW: Handler for Shift+Enter
+              placeholder="Send a message (Shift+Enter for new line)..."
+              rows={Math.min(10, input.split('\n').length)} // Dynamic rows
+              className="w-full bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-6 py-4 pr-14 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-xl dark:shadow-none text-base resize-none overflow-y-auto"
               disabled={isLoading || !selectedModelId}
             />
             <button 
               type="submit" 
               disabled={isLoading || !input.trim() || !selectedModelId}
-              className="absolute right-2 p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-30 disabled:bg-zinc-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-500/50"
+              className="absolute right-2 bottom-2 p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-30 disabled:bg-zinc-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-500/50"
             >
               <AnimatePresence mode="wait">
                 {isLoading 
