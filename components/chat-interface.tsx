@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent } from 'react';
+import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent, MouseEvent } from 'react';
 import { MessageBubble } from './message-bubble';
-import { Send, Bot, PlusCircle, Loader2, AlertCircle, History } from 'lucide-react';
+import { Send, Bot, PlusCircle, Loader2, AlertCircle, History, MoreVertical, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils'; // Assuming you have a standard cn utility
+import { cn } from '@/lib/utils'; 
 
 // Define types for clarity
 interface Message {
@@ -74,7 +74,6 @@ export default function ChatInterface() {
     if (existingIndex > -1) {
         title = currentList[existingIndex].title; 
     } else if (currentMessages.length > 0) {
-        // Title logic: uses the first message content if the chat is new.
         const firstMessage = currentMessages[0].content.trim(); 
         title = firstMessage.length > 30 ? firstMessage.slice(0, 30) + '...' : firstMessage;
     }
@@ -84,7 +83,7 @@ export default function ChatInterface() {
       title: title,
       model: modelId,
       color: modelColor,
-      date: Date.now() // Used to sort to the top
+      date: Date.now() 
     };
 
     if (existingIndex > -1) {
@@ -135,6 +134,27 @@ export default function ChatInterface() {
         setSelectedModelColor(models[0].color);
     }
   };
+  
+  const deleteChat = (idToDelete: string) => {
+      // 1. Remove from localStorage
+      localStorage.removeItem(`chat_${idToDelete}`);
+
+      // 2. Remove from chat list metadata
+      const updatedList = chatList.filter(chat => chat.id !== idToDelete);
+      localStorage.setItem('all_chats', JSON.stringify(updatedList));
+      setChatList(updatedList);
+      
+      // 3. Handle active chat
+      if (idToDelete === chatId) {
+          if (updatedList.length > 0) {
+              const nextChat = updatedList[0];
+              loadChat(nextChat.id, nextChat.model, nextChat.color);
+          } else {
+              startNewChat();
+          }
+      }
+  };
+
 
   // --- Effects ---
 
@@ -196,26 +216,30 @@ export default function ChatInterface() {
 
   // --- Event Handlers ---
 
-  // Handle Shift+Enter for newline
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSubmit(e as unknown as FormEvent<HTMLFormElement>);
     }
   };
+  
+  const handleHistoryClick = (e: MouseEvent, chat: ChatMetadata) => {
+    // Only load the chat if Shift is NOT held.
+    if (!e.shiftKey) {
+        loadChat(chat.id, chat.model, chat.color);
+    }
+  };
 
-const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedModelId || !input.trim() || isLoading) return;
 
-    // Use input directly
     let userText = input; 
     setInput(''); 
     setError(null);
 
+    // Fix for user newlines not rendering in Markdown
     userText = userText.replace(/\n(?!\n)/g, '\n\n'); 
-    
-    // Now, ensure we clean up extra whitespace that might interfere with rendering
     userText = userText.trim();
 
 
@@ -305,36 +329,23 @@ const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
            
            <AnimatePresence initial={false}>
              {chatList.map((chat) => (
-               <motion.div
-                 key={chat.id}
-                 initial={{ opacity: 0, x: -10 }}
-                 animate={{ opacity: 1, x: 0 }}
-                 exit={{ opacity: 0, height: 0 }}
-                 transition={{ duration: 0.2 }}
-                 onClick={() => loadChat(chat.id, chat.model, chat.color)}
-                 className={cn(
-                   "p-3 mb-2 rounded-lg cursor-pointer transition-all duration-200 flex items-center gap-3",
-                   chat.id === chatId 
-                     ? "bg-blue-500/10 text-blue-400 font-medium border border-blue-500/30"
-                     : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
-                 )}
-               >
-                 <div 
-                    className="w-2 h-2 rounded-full flex-shrink-0" 
-                    style={{ backgroundColor: chat.color }}
-                 />
-                 <span className="text-sm truncate leading-tight">{chat.title}</span>
-               </motion.div>
+                <HistoryItem 
+                    key={chat.id} 
+                    chat={chat} 
+                    isActive={chat.id === chatId}
+                    onChatClick={handleHistoryClick}
+                    onDelete={deleteChat}
+                />
              ))}
            </AnimatePresence>
            {chatList.length === 0 && <p className="text-sm text-zinc-400 italic px-2">No history saved.</p>}
         </div>
       </motion.div>
 
-      {/* Main Chat Area */}
+      {/* Main Chat Area (unchanged) */}
       <div className="flex-1 flex flex-col relative">
         
-        {/* Header */}
+        {/* Header (unchanged) */}
         <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-end px-6 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-10">
           <motion.select 
             initial={{ opacity: 0, y: -5 }}
@@ -351,9 +362,9 @@ const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
           </motion.select>
         </header>
 
-        {/* Messages Container (CENTERED WRAPPER) */}
+        {/* Messages Container (unchanged) */}
         <div className="flex-1 overflow-y-auto scroll-smooth">
-          <div className="max-w-4xl mx-auto px-6 py-6 space-y-4"> {/* Centered content area */}
+          <div className="max-w-4xl mx-auto px-6 py-6 space-y-4"> 
             
             {messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center opacity-50 pt-20">
@@ -390,7 +401,7 @@ const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
           </div> 
         </div>
 
-        {/* Input Area (Centered and matches max-w-4xl) */}
+        {/* Input Area (unchanged) */}
         <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
           <motion.form 
             initial={{ opacity: 0, y: 10 }}
@@ -434,3 +445,142 @@ const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     </div>
   );
 }
+
+// NEW: History Item Component for sidebar
+interface HistoryItemProps {
+    chat: ChatMetadata;
+    isActive: boolean;
+    onChatClick: (e: MouseEvent, chat: ChatMetadata) => void;
+    onDelete: (chatId: string) => void;
+}
+
+const HistoryItem: React.FC<HistoryItemProps> = ({ chat, isActive, onChatClick, onDelete }) => {
+    const [isHovered, setIsHovered] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
+    const [isShiftDown, setIsShiftDown] = useState(false);
+    
+    // Effect to track the Shift key state globally
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Shift') {
+                setIsShiftDown(true);
+            }
+        };
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.key === 'Shift') {
+                setIsShiftDown(false);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown as any);
+        window.addEventListener('keyup', handleKeyUp as any);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown as any);
+            window.removeEventListener('keyup', handleKeyUp as any);
+        };
+    }, []);
+
+    // Function to handle the final delete action with confirmation
+    const confirmAndDelete = (e: MouseEvent) => {
+        e.stopPropagation();
+        if (window.confirm(`Are you sure you want to delete "${chat.title}"?`)) {
+            onDelete(chat.id);
+        }
+        setShowMenu(false);
+    };
+    
+    // Handler for the trash icon click (used when Shift is held)
+    const handleShiftDeleteClick = (e: MouseEvent) => {
+        e.stopPropagation();
+        confirmAndDelete(e);
+    };
+    
+    // Handler for the three-dot menu click
+    const handleMenuToggle = (e: MouseEvent) => {
+        e.stopPropagation(); 
+        setShowMenu(prev => !prev);
+    };
+    
+    // Check if the trash icon should be visually active/shown
+    const showTrashIcon = isHovered && isShiftDown;
+    // Check if the 3-dots menu should be visually active/shown
+    const showMenuIcon = isHovered && !isShiftDown && !showMenu;
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={(e) => onChatClick(e, chat)}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => {
+                setIsHovered(false);
+            }}
+            className={cn(
+                "p-3 mb-2 rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between gap-3 relative overflow-visible",
+                isActive 
+                    ? "bg-blue-500/10 text-blue-400 font-medium border border-blue-500/30"
+                    : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 group"
+            )}
+        >
+            <div className="flex items-center gap-3 min-w-0 flex-grow">
+                <div 
+                    className="w-2 h-2 rounded-full flex-shrink-0" 
+                    style={{ backgroundColor: chat.color }}
+                />
+                <span className="text-sm truncate leading-tight">{chat.title}</span>
+            </div>
+            
+            {(isHovered || showMenu) && (
+                <div className="flex-shrink-0 flex items-center gap-1">
+                    
+                    {showTrashIcon && (
+                        <motion.button
+                            key="trash-icon"
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            onClick={handleShiftDeleteClick}
+                            className={cn(
+                                "p-1 rounded-full transition-colors bg-red-500/10 text-red-500 hover:bg-red-500/30",
+                            )}
+                            title="Click to delete"
+                        >
+                            <Trash2 size={16} />
+                        </motion.button>
+                    )}
+
+                    {!showTrashIcon && (
+                        <motion.button
+                            key="more-icon"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={handleMenuToggle}
+                            className={cn(
+                                "p-1 rounded-full transition-colors",
+                                isActive ? "text-blue-400" : "text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700",
+                                showMenu && "bg-zinc-200 dark:bg-zinc-700"
+                            )}
+                        >
+                            <MoreVertical size={16} />
+                        </motion.button>
+                    )}
+                    
+                    {showMenu && (
+                        <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl z-20">
+                            <button 
+                                onClick={confirmAndDelete}
+                                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-500/10 rounded-lg"
+                            >
+                                <Trash2 size={14} /> Delete Chat
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </motion.div>
+    );
+};
