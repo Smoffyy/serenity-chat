@@ -42,7 +42,7 @@ const generateRandomColor = () => {
 };
 
 
-// History Item Component with Motion (Restored/Maintained the superior dark-gradient look)
+// History Item Component with Motion
 const HistoryItem: React.FC<{ 
     chat: ChatMetadata, 
     isActive: boolean, 
@@ -185,7 +185,7 @@ const HistoryItem: React.FC<{
     );
 };
 
-// Settings Modal Component (Restored/Maintained the superior dark-gradient look)
+// Settings Modal Component 
 const SettingsModal: React.FC<{ isOpen: boolean, onClose: () => void, deleteAllChats: () => void }> = ({ isOpen, onClose, deleteAllChats }) => {
     if (!isOpen) return null;
     return (
@@ -244,6 +244,7 @@ export default function ChatInterface() {
   const getChatMetadata = useCallback((): ChatMetadata[] => {
     try {
       const list = JSON.parse(localStorage.getItem('all_chats') || '[]') as ChatMetadata[];
+      // Always ensure the list is sorted by date descending when retrieved
       return list.sort((a, b) => b.date - a.date);
     } catch (e) {
       console.error("Failed to parse chat list", e);
@@ -251,16 +252,24 @@ export default function ChatInterface() {
     }
   }, []);
 
-  const saveHistory = useCallback((currentMessages: Message[], modelId: string, modelColor: string) => {
+  // FIX: Added updateDate flag to control when the 'date' property is set to Date.now()
+  const saveHistory = useCallback((currentMessages: Message[], modelId: string, modelColor: string, updateDate: boolean = false) => {
     localStorage.setItem(`chat_${chatId}`, JSON.stringify(currentMessages));
     
     const currentList = getChatMetadata();
     const existingIndex = currentList.findIndex(c => c.id === chatId);
     
     let title: string = 'New Chat';
+    let chatDate: number = Date.now(); // Default to now (for new chats or when updateDate is true)
+
     if (existingIndex > -1) {
-        title = currentList[existingIndex].title; 
+        title = currentList[existingIndex].title;
+        // CRITICAL FIX: If we are NOT updating the date, use the existing date
+        if (!updateDate) {
+            chatDate = currentList[existingIndex].date;
+        }
     } else if (currentMessages.length > 0) {
+        // New chat, determine title from first message
         const firstMessage = currentMessages[0].content.trim(); 
         title = firstMessage.length > 30 ? firstMessage.slice(0, 30) + '...' : firstMessage;
     }
@@ -270,7 +279,7 @@ export default function ChatInterface() {
       title: title,
       model: modelId,
       color: modelColor,
-      date: Date.now() 
+      date: chatDate // Use the determined date
     };
 
     if (existingIndex > -1) {
@@ -281,11 +290,12 @@ export default function ChatInterface() {
     
     localStorage.setItem('all_chats', JSON.stringify(currentList)); 
     setChatList(currentList.sort((a, b) => b.date - a.date)); 
-  }, [chatId, getChatMetadata]);
+  }, [chatId, getChatMetadata, setChatList]); // Added setChatList to deps
+
   
   const loadChat = useCallback((id: string, modelId: string, color: string) => {
     if (messages.length > 0) {
-        saveHistory(messages, selectedModelId, selectedModelColor);
+        saveHistory(messages, selectedModelId, selectedModelColor, false);
     }
 
     setChatId(id);
@@ -314,7 +324,7 @@ export default function ChatInterface() {
 
   const startNewChat = () => {
     if (messages.length > 0) {
-        saveHistory(messages, selectedModelId, selectedModelColor);
+        saveHistory(messages, selectedModelId, selectedModelColor, false);
     }
     const newId = Date.now().toString();
     setChatId(newId);
@@ -336,7 +346,7 @@ export default function ChatInterface() {
 
       const updatedList = chatList.filter(chat => chat.id !== idToDelete);
       localStorage.setItem('all_chats', JSON.stringify(updatedList));
-      setChatList(updatedList);
+      setChatList(updatedList.sort((a, b) => b.date - a.date)); // Ensure sorting on manual list update
       
       if (idToDelete === chatId) {
           if (updatedList.length > 0) {
@@ -501,7 +511,8 @@ export default function ChatInterface() {
       
       const finalMessages = [...messagesToSend, { ...aiMsg, content: accumulatedContent, modelColor: selectedModelColor }]; 
       setMessages(finalMessages); 
-      saveHistory(finalMessages, selectedModelId, selectedModelColor); 
+      // FIX: Call saveHistory with updateDate: true to move the chat to the top
+      saveHistory(finalMessages, selectedModelId, selectedModelColor, true); 
 
     } catch (err: any) {
       setError(err.message || "Something went wrong");
