@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent, useLayoutEffect } from 'react';
+import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent } from 'react';
 import { MessageBubble } from './message-bubble';
 import { Send, Plus, ChevronDown, Terminal, Loader2, User, Settings, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,7 +31,7 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [chatList, setChatList] = useState<ChatMetadata[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isNewChat, setIsNewChat] = useState(true); // Track if it's a brand new chat
+  const [isNewChat, setIsNewChat] = useState(true); // Added: Tracks if the current chat has ever been saved
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -81,7 +81,7 @@ export default function ChatInterface() {
         currentList.unshift(newMeta);
       }
       
-      // Re-sort the list if the date was updated
+      // Re-sort the list if the date was updated or it's a new chat
       const sortedList = currentList.sort((a, b) => b.date - a.date);
 
       localStorage.setItem('all_chats', JSON.stringify(sortedList));
@@ -92,32 +92,35 @@ export default function ChatInterface() {
 
   const loadChat = useCallback(
     (id: string) => {
-      // If we are switching from a chat that has unsaved/staged messages, save it first.
-      // Do NOT update the timestamp (shouldUpdateDate: false).
-      if (messages.length > 0 && chatId !== id && !isNewChat) { 
-        saveHistory(messages, false);
+      // FIX: Save the current chat's state if it has content, but DO NOT update the date.
+      if (messages.length > 0 && chatId !== id && !isNewChat) {
+          saveHistory(messages, false); 
       }
 
       setChatId(id);
       setMessages([]);
       setInput('');
-      setIsNewChat(false); // It's now an existing chat
 
       const saved = localStorage.getItem(`chat_${id}`);
       if (saved) {
         try {
           setMessages(JSON.parse(saved));
+          setIsNewChat(false);
         } catch (e) {
           console.error(e);
+          setIsNewChat(true); 
         }
+      } else {
+          setIsNewChat(true);
       }
+
       setTimeout(() => inputRef.current?.focus(), 0);
     },
     [messages, saveHistory, chatId, isNewChat]
   );
 
   const startNewChat = () => {
-    // If the current chat has content, save it before starting new one (Do NOT update date)
+    // Save the current chat's state if it has content, but DO NOT update the date.
     if (messages.length > 0 && !isNewChat) saveHistory(messages, false);
 
     setChatId(Date.now().toString());
@@ -162,19 +165,24 @@ export default function ChatInterface() {
       .then((data) => {
         if (data.data?.length) {
           setModels(data.data);
-          // Only set a default model if one hasn't been selected yet
           if (!selectedModelId) setSelectedModelId(data.data[0].id);
         }
       });
       
-    // Initial focus on load
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
-  // Smoother scroll to bottom after messages update
-  useLayoutEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  // SCROLLING FIX: Conditional smooth/instant scroll
+  useEffect(() => {
+    if (!messagesEndRef.current) return;
+    
+    // If loading/streaming, use 'instant' scroll to prevent stuttering.
+    // Otherwise, use 'smooth' scroll for a pleasant effect.
+    const scrollBehavior = isLoading ? 'instant' : 'smooth';
+
+    messagesEndRef.current.scrollIntoView({ behavior: scrollBehavior });
+    
+  }, [messages, isLoading]); // Dependency on messages array and loading state for continuous update
 
   // --- Submission Logic ---
 
@@ -184,7 +192,6 @@ export default function ChatInterface() {
 
     const userText = input.trim();
 
-    // Reset input height
     if (inputRef.current) {
       inputRef.current.style.height = '56px';
     }
@@ -205,7 +212,7 @@ export default function ChatInterface() {
     const aiMsg: Message = { id: aiMsgId, role: 'assistant', content: '' };
 
     setMessages((prev) => [...prev, aiMsg]);
-    setIsNewChat(false); // Chat is now saved/active
+    setIsNewChat(false); // Mark as saved/active
 
     try {
       const response = await fetch('/api/chat', {
@@ -232,7 +239,6 @@ export default function ChatInterface() {
         const chunk = decoder.decode(value, { stream: true });
         rawAccumulated += chunk;
 
-        // Update the content as it streams
         setMessages((prev) =>
           prev.map((m) => (m.id === aiMsgId ? { ...m, content: rawAccumulated } : m))
         );
@@ -245,7 +251,6 @@ export default function ChatInterface() {
       saveHistory(finalHistory, true); // Update date because a new message was sent
     } catch (err) {
       console.error(err);
-      // Remove staging messages on error
       setMessages((prev) => prev.filter((m) => m.id !== aiMsgId && m.id !== userMsg.id));
     } finally {
       setIsLoading(false);

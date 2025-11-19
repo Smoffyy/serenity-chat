@@ -57,6 +57,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content }) =
         </div>
       );
     },
+    // Fix for table rendering
+    table: ({ children }) => (
+      <div className="w-full overflow-x-auto my-4 rounded-lg border border-zinc-700">
+        <table className="w-full text-sm text-left border-collapse">{children}</table>
+      </div>
+    ),
+    th: ({ children }) => (
+      <th className="px-4 py-2 bg-zinc-800 border-b border-zinc-700 font-semibold text-zinc-300">{children}</th>
+    ),
+    td: ({ children }) => (
+      <td className="px-4 py-2 border-b border-zinc-800 last:border-b-0 even:bg-zinc-900/50">{children}</td>
+    ),
+    tr: ({ children }) => (
+        <tr className="border-b border-zinc-700 last:border-b-0 hover:bg-zinc-800/20 transition-colors">{children}</tr>
+    ),
     br: () => <br />,
     text: ({ children }) => <span className="whitespace-pre-wrap break-words">{children}</span>,
   };
@@ -70,16 +85,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content }) =
     >
       <div
         className={cn(
-          'max-w-3xl', // Base max width for all content
+          'max-w-3xl',
           isUser
-            ? 'w-fit bg-[#2f2f2f] text-zinc-100 px-5 py-3 rounded-[26px] rounded-tr-sm max-w-[85%] md:max-w-[70%]' // w-fit makes the bubble shrink to content
-            : 'w-full' // AI messages use the full width up to max-w-3xl
+            ? 'w-fit bg-[#2f2f2f] text-zinc-100 px-5 py-3 rounded-[26px] rounded-tr-sm max-w-[85%] md:max-w-[70%]' // w-fit is correct for user bubble
+            : 'w-full'
         )}
       >
         <div className={cn('prose prose-invert max-w-none', isUser ? 'text-[15px]' : 'text-[16px]')}>
           <ReactMarkdown
             components={MarkdownComponents}
-            remarkPlugins={[remarkGfm, remarkBreaks]}
+            remarkPlugins={[remarkGfm, remarkBreaks]} 
             rehypePlugins={[rehypeHighlight]}
             skipHtml={false}
           >
