@@ -1,241 +1,38 @@
 "use client";
 
-import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent, MouseEvent } from 'react';
+import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent, useLayoutEffect } from 'react';
 import { MessageBubble } from './message-bubble';
-import { Send, Bot, PlusCircle, Loader2, AlertCircle, History, MoreVertical, Trash2, User, Settings, X } from 'lucide-react';
+import { Send, Plus, ChevronDown, Terminal, Loader2, User, Settings, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils'; 
+import { cn } from '@/lib/utils';
 
-// Define types for clarity
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  modelColor?: string; 
 }
+
 interface ChatMetadata {
   id: string;
   title: string;
-  model: string;
-  color: string;
-  date: number; 
+  date: number;
 }
+
 interface ModelData {
-    id: string;
-    color: string;
+  id: string;
 }
-
-const generateRandomColor = () => {
-  const colors = [
-    '#6366F1', // Indigo
-    '#3B82F6', // Blue
-    '#06B6D4', // Cyan
-    '#A855F7', // Purple
-    '#EC4899', // Pink
-  ];
-  const getRandomInt = (min: number, max: number) => {
-      min = Math.ceil(min);
-      max = Math.floor(max);
-      return Math.floor(Math.random() * (max - min + 1)) + min;
-  }
-  return colors[Math.floor(getRandomInt(0, colors.length - 1))];
-};
-
-
-// History Item Component with Motion
-const HistoryItem: React.FC<{ 
-    chat: ChatMetadata, 
-    isActive: boolean, 
-    onChatClick: (e: MouseEvent, chat: ChatMetadata) => void, 
-    onDelete: (id: string) => void 
-}> = ({ chat, isActive, onChatClick, onDelete }) => {
-    const [showMenu, setShowMenu] = useState(false);
-    const [isHovered, setIsHovered] = useState(false);
-    const [isShiftDown, setIsShiftDown] = useState(false);
-    
-    // Effect to track the Shift key state globally
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Shift') {
-                setIsShiftDown(true);
-            }
-        };
-        const handleKeyUp = (e: KeyboardEvent) => {
-            if (e.key === 'Shift') {
-                setIsShiftDown(false);
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown as any);
-        window.addEventListener('keyup', handleKeyUp as any);
-
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown as any);
-            window.removeEventListener('keyup', handleKeyUp as any);
-        };
-    }, []);
-
-    const handleMenuToggle = (e: MouseEvent) => {
-        e.stopPropagation();
-        setShowMenu(prev => !prev);
-    };
-
-    const confirmAndDelete = (e: MouseEvent) => {
-        e.stopPropagation();
-        if (window.confirm(`Are you sure you want to delete chat: "${chat.title}"?`)) {
-            onDelete(chat.id);
-        }
-        setShowMenu(false);
-    };
-    
-    // Handler for the trash icon click (used when Shift is held)
-    const handleShiftDeleteClick = (e: MouseEvent) => {
-        e.stopPropagation();
-        confirmAndDelete(e);
-    };
-    
-    // Close menu when clicking outside
-    useEffect(() => {
-        const handleClickOutside = () => {
-            if (showMenu) {
-                setShowMenu(false);
-            }
-        };
-        window.addEventListener('click', handleClickOutside);
-        return () => window.removeEventListener('click', handleClickOutside);
-    }, [showMenu]);
-
-    const showTrashIcon = isHovered && isShiftDown;
-
-    return (
-        <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3 }}
-            layout 
-            onClick={(e) => onChatClick(e, chat)}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
-            className={cn(
-                "flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all group relative cursor-pointer overflow-visible",
-                isActive 
-                    ? "bg-blue-600/20 text-blue-300 font-medium border border-blue-600/50 shadow-md" 
-                    : "text-zinc-300 hover:bg-zinc-800 hover:border-zinc-700 border border-transparent"
-            )}
-        >
-            <span className="flex-1 text-left truncate" title={chat.title}>
-                {chat.title}
-            </span>
-            
-            {/* Action Menu Button */}
-            <div className="flex-shrink-0">
-                {(isHovered || showMenu) && (
-                    <div className="flex items-center gap-1">
-                        {/* Trash Icon for Shift + Click */}
-                        {showTrashIcon && (
-                            <motion.button
-                                key="trash-icon"
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.8 }}
-                                onClick={handleShiftDeleteClick}
-                                className={cn(
-                                    "p-1 rounded-full transition-colors bg-red-500/10 text-red-500 hover:bg-red-500/30",
-                                )}
-                                title="Click to delete"
-                            >
-                                <Trash2 size={16} />
-                            </motion.button>
-                        )}
-                        
-                        {/* Three-dot menu button */}
-                        {!showTrashIcon && (
-                            <motion.button
-                                key="more-icon"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                onClick={handleMenuToggle}
-                                className={cn(
-                                    "p-1 rounded-full transition-colors opacity-0 group-hover:opacity-100",
-                                    isActive ? "text-blue-400" : "text-zinc-500 hover:bg-zinc-700",
-                                    showMenu && "bg-zinc-700 opacity-100"
-                                )}
-                            >
-                                <MoreVertical size={16} />
-                            </motion.button>
-                        )}
-                    </div>
-                )}
-                
-                {/* Deletion Menu (Dropdown) */}
-                {showMenu && (
-                    <div className="absolute right-0 top-full mt-1 w-40 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-20">
-                        <button 
-                            onClick={confirmAndDelete}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                        >
-                            <Trash2 size={14} /> Delete Chat
-                        </button>
-                    </div>
-                )}
-            </div>
-        </motion.div>
-    );
-};
-
-// Settings Modal Component 
-const SettingsModal: React.FC<{ isOpen: boolean, onClose: () => void, deleteAllChats: () => void }> = ({ isOpen, onClose, deleteAllChats }) => {
-    if (!isOpen) return null;
-    return (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center backdrop-blur-sm">
-            <motion.div 
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="bg-zinc-900 p-8 rounded-2xl w-full max-w-md shadow-2xl border border-zinc-800"
-            >
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold flex items-center gap-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400"><Settings size={24} /> Settings</h2>
-                    <button onClick={onClose} className="p-2 rounded-full text-zinc-400 hover:bg-zinc-800 transition"><X size={20} /></button>
-                </div>
-                
-                <div className="space-y-6">
-                    <h3 className="text-lg font-semibold text-zinc-300 border-b border-zinc-700 pb-2">Data Management</h3>
-                    <div className="flex justify-between items-center p-4 bg-red-900/20 rounded-xl border border-red-800/50">
-                        <span className="text-red-400 font-medium">Permanently Delete All Chat History</span>
-                        <button
-                            onClick={() => { 
-                                if (window.confirm("Are you sure you want to permanently delete ALL chat history? This action cannot be undone.")) {
-                                    deleteAllChats();
-                                }
-                            }}
-                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium text-sm shadow-lg hover:shadow-red-500/30"
-                        >
-                            Delete All
-                        </button>
-                    </div>
-                </div>
-            </motion.div>
-        </div>
-    );
-};
-
 
 export default function ChatInterface() {
   const [models, setModels] = useState<ModelData[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
-  const [selectedModelColor, setSelectedModelColor] = useState<string>('');
-
   const [chatId, setChatId] = useState<string>(() => Date.now().toString());
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [chatList, setChatList] = useState<ChatMetadata[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  
+  const [isNewChat, setIsNewChat] = useState(true); // Track if it's a brand new chat
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -243,468 +40,420 @@ export default function ChatInterface() {
 
   const getChatMetadata = useCallback((): ChatMetadata[] => {
     try {
+      // Sort by date descending
       const list = JSON.parse(localStorage.getItem('all_chats') || '[]') as ChatMetadata[];
-      // Always ensure the list is sorted by date descending when retrieved
       return list.sort((a, b) => b.date - a.date);
-    } catch (e) {
-      console.error("Failed to parse chat list", e);
+    } catch {
       return [];
     }
   }, []);
 
-  // FIX: Added updateDate flag to control when the 'date' property is set to Date.now()
-  const saveHistory = useCallback((currentMessages: Message[], modelId: string, modelColor: string, updateDate: boolean = false) => {
-    localStorage.setItem(`chat_${chatId}`, JSON.stringify(currentMessages));
-    
-    const currentList = getChatMetadata();
-    const existingIndex = currentList.findIndex(c => c.id === chatId);
-    
-    let title: string = 'New Chat';
-    let chatDate: number = Date.now(); // Default to now (for new chats or when updateDate is true)
+  const saveHistory = useCallback(
+    (currentMessages: Message[], shouldUpdateDate: boolean = false) => {
+      localStorage.setItem(`chat_${chatId}`, JSON.stringify(currentMessages));
 
-    if (existingIndex > -1) {
+      const currentList = getChatMetadata();
+      const existingIndex = currentList.findIndex((c) => c.id === chatId);
+
+      let title = 'New Chat';
+      let date = Date.now();
+
+      if (existingIndex > -1) {
         title = currentList[existingIndex].title;
-        // CRITICAL FIX: If we are NOT updating the date, use the existing date
-        if (!updateDate) {
-            chatDate = currentList[existingIndex].date;
+        // FIX: Only update the date if shouldUpdateDate is true (i.e., new message sent)
+        date = shouldUpdateDate ? Date.now() : currentList[existingIndex].date;
+      } else if (currentMessages.length > 0) {
+        // Only set title for the first message
+        const firstUserMsg = currentMessages.find((m) => m.role === 'user');
+        if (firstUserMsg) {
+          const txt = firstUserMsg.content.trim();
+          title = txt.length > 30 ? txt.slice(0, 30) + '...' : txt;
         }
-    } else if (currentMessages.length > 0) {
-        // New chat, determine title from first message
-        const firstMessage = currentMessages[0].content.trim(); 
-        title = firstMessage.length > 30 ? firstMessage.slice(0, 30) + '...' : firstMessage;
-    }
-    
-    const newMetadata: ChatMetadata = {
-      id: chatId,
-      title: title,
-      model: modelId,
-      color: modelColor,
-      date: chatDate // Use the determined date
-    };
-
-    if (existingIndex > -1) {
-      currentList[existingIndex] = newMetadata; 
-    } else {
-      currentList.unshift(newMetadata); 
-    }
-    
-    localStorage.setItem('all_chats', JSON.stringify(currentList)); 
-    setChatList(currentList.sort((a, b) => b.date - a.date)); 
-  }, [chatId, getChatMetadata, setChatList]); // Added setChatList to deps
-
-  
-  const loadChat = useCallback((id: string, modelId: string, color: string) => {
-    if (messages.length > 0) {
-        saveHistory(messages, selectedModelId, selectedModelColor, false);
-    }
-
-    setChatId(id);
-    setSelectedModelId(modelId);
-    setSelectedModelColor(color);
-    setInput('');
-    setError(null);
-
-    const saved = localStorage.getItem(`chat_${id}`);
-    if (saved) {
-      try {
-        setMessages(JSON.parse(saved));
-      } catch (e) { 
-        console.error("Failed to load chat history", e);
-        setMessages([]);
       }
-    } else {
-      setMessages([]);
-    }
-    
-    setTimeout(() => {
-        inputRef.current?.focus(); 
-    }, 0); 
 
-  }, [messages, selectedModelId, selectedModelColor, saveHistory]);
+      const newMeta: ChatMetadata = { id: chatId, title, date };
+
+      if (existingIndex > -1) {
+        // Update existing entry
+        currentList[existingIndex] = newMeta;
+      } else {
+        // Add new entry
+        currentList.unshift(newMeta);
+      }
+      
+      // Re-sort the list if the date was updated
+      const sortedList = currentList.sort((a, b) => b.date - a.date);
+
+      localStorage.setItem('all_chats', JSON.stringify(sortedList));
+      setChatList(sortedList);
+    },
+    [chatId, getChatMetadata]
+  );
+
+  const loadChat = useCallback(
+    (id: string) => {
+      // If we are switching from a chat that has unsaved/staged messages, save it first.
+      // Do NOT update the timestamp (shouldUpdateDate: false).
+      if (messages.length > 0 && chatId !== id && !isNewChat) { 
+        saveHistory(messages, false);
+      }
+
+      setChatId(id);
+      setMessages([]);
+      setInput('');
+      setIsNewChat(false); // It's now an existing chat
+
+      const saved = localStorage.getItem(`chat_${id}`);
+      if (saved) {
+        try {
+          setMessages(JSON.parse(saved));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      setTimeout(() => inputRef.current?.focus(), 0);
+    },
+    [messages, saveHistory, chatId, isNewChat]
+  );
 
   const startNewChat = () => {
-    if (messages.length > 0) {
-        saveHistory(messages, selectedModelId, selectedModelColor, false);
-    }
-    const newId = Date.now().toString();
-    setChatId(newId);
+    // If the current chat has content, save it before starting new one (Do NOT update date)
+    if (messages.length > 0 && !isNewChat) saveHistory(messages, false);
+
+    setChatId(Date.now().toString());
     setMessages([]);
     setInput('');
-    setError(null);
-    if (models.length > 0) {
-        setSelectedModelId(models[0].id);
-        setSelectedModelColor(models[0].color);
-    }
-    
-    setTimeout(() => {
-        inputRef.current?.focus(); 
-    }, 0); 
+    setIsNewChat(true); // Indicate this is a new, unsaved chat
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
-  
-  const deleteChat = (idToDelete: string) => {
-      localStorage.removeItem(`chat_${idToDelete}`);
 
-      const updatedList = chatList.filter(chat => chat.id !== idToDelete);
-      localStorage.setItem('all_chats', JSON.stringify(updatedList));
-      setChatList(updatedList.sort((a, b) => b.date - a.date)); // Ensure sorting on manual list update
-      
-      if (idToDelete === chatId) {
-          if (updatedList.length > 0) {
-              const nextChat = updatedList[0];
-              loadChat(nextChat.id, nextChat.model, nextChat.color);
-          } else {
-              startNewChat();
-          }
-      }
-  };
-  
   const deleteAllChats = () => {
-      const currentList = getChatMetadata();
-      currentList.forEach(chat => {
-          localStorage.removeItem(`chat_${chat.id}`);
-      });
-
-      localStorage.removeItem('all_chats');
-      setChatList([]);
-
-      startNewChat();
-      
-      setIsSettingsOpen(false);
+    chatList.forEach((c) => localStorage.removeItem(`chat_${c.id}`));
+    localStorage.setItem('all_chats', '[]');
+    setChatList([]);
+    startNewChat();
+    setIsSettingsOpen(false);
   };
+  
+  // --- Event Handlers ---
 
+  const handleInputResize = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
+    const el = e.currentTarget as HTMLTextAreaElement;
+    el.style.height = 'auto';
+    const scrollHeight = el.scrollHeight;
+    const newHeight = Math.min(Math.max(scrollHeight, 56), 200);
+    el.style.height = `${newHeight}px`;
+  }, []);
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onSubmit(e as unknown as FormEvent);
+    }
+  };
 
   // --- Effects ---
 
   useEffect(() => {
     setChatList(getChatMetadata());
 
-    const fetchModels = async () => {
-      try {
-        const res = await fetch('/api/models');
-        
-        if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.error || `Failed to fetch models with status: ${res.status}`);
+    fetch('/api/models')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.data?.length) {
+          setModels(data.data);
+          // Only set a default model if one hasn't been selected yet
+          if (!selectedModelId) setSelectedModelId(data.data[0].id);
         }
+      });
+      
+    // Initial focus on load
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
 
-        const data = await res.json();
+  // Smoother scroll to bottom after messages update
+  useLayoutEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-        if (data.data && data.data.length > 0) {
-          const coloredModels = data.data.map((m: any) => ({
-              id: m.id,
-              color: generateRandomColor(), 
-          }));
-          
-          setModels(coloredModels);
-          
-          let initialModel = coloredModels[0].id;
-          let initialColor = coloredModels[0].color;
-          
-          const lastChat = getChatMetadata()[0];
-          if (lastChat) {
-              loadChat(lastChat.id, lastChat.model, lastChat.color);
-              return; 
-          }
-          
-          setSelectedModelId(initialModel);
-          setSelectedModelColor(initialColor);
-          
-          // Initial focus on load
-          setTimeout(() => {
-            inputRef.current?.focus(); 
-          }, 0); 
-        }
-      } catch (err: any) {
-        setError(`Initialization Error: ${err.message || "Failed to connect to Local AI models."}`);
-        console.error("Initialization Error:", err);
-      }
-    };
-    
-    fetchModels();
-  }, []); 
+  // --- Submission Logic ---
 
-  useEffect(() => {
-    const model = models.find(m => m.id === selectedModelId);
-    if (model) {
-        setSelectedModelColor(model.color);
-    }
-  }, [selectedModelId, models]);
-
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages, isLoading]);
-
-
-  // --- Event Handlers ---
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      onSubmit(e as unknown as FormEvent<HTMLFormElement>);
-    }
-  };
-  
-  const handleHistoryClick = (e: MouseEvent, chat: ChatMetadata) => {
-    if (!e.shiftKey) {
-        loadChat(chat.id, chat.model, chat.color);
-    }
-  };
-
-  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedModelId || !input.trim() || isLoading) return;
 
-    let userText = input; 
-    setInput(''); 
-    setError(null);
+    const userText = input.trim();
 
-    userText = userText.replace(/\n(?!\n)/g, '\n\n'); 
-    userText = userText.trim();
+    // Reset input height
+    if (inputRef.current) {
+      inputRef.current.style.height = '56px';
+    }
 
+    setInput('');
 
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: userText };
-    const messagesToSend = [...messages, userMsg];
-    setMessages(messagesToSend);
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: userText,
+    };
+
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
     setIsLoading(true);
 
     const aiMsgId = (Date.now() + 1).toString();
-    const aiMsg: Message = { id: aiMsgId, role: 'assistant', content: "Thinking..." }; 
-    setMessages(prev => [...prev, aiMsg]);
+    const aiMsg: Message = { id: aiMsgId, role: 'assistant', content: '' };
 
+    setMessages((prev) => [...prev, aiMsg]);
+    setIsNewChat(false); // Chat is now saved/active
 
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: messagesToSend.map(m => ({ role: m.role, content: m.content })),
-          model: selectedModelId
-        })
+          messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
+          model: selectedModelId,
+        }),
       });
 
-      if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Failed to connect to AI server.");
-      }
-      if (!response.body) throw new Error("No response body");
+      if (!response.ok) throw new Error('Connection failed');
+      if (!response.body) throw new Error('No stream');
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let accumulatedContent = '';
+
+      let rawAccumulated = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
-        accumulatedContent += chunk;
-        
-        setMessages(currentMsgs => 
-          currentMsgs.map(msg => 
-            msg.id === aiMsgId 
-              ? { ...msg, content: accumulatedContent, modelColor: selectedModelColor } 
-              : msg
-          )
+        rawAccumulated += chunk;
+
+        // Update the content as it streams
+        setMessages((prev) =>
+          prev.map((m) => (m.id === aiMsgId ? { ...m, content: rawAccumulated } : m))
         );
       }
-      
-      const finalMessages = [...messagesToSend, { ...aiMsg, content: accumulatedContent, modelColor: selectedModelColor }]; 
-      setMessages(finalMessages); 
-      // FIX: Call saveHistory with updateDate: true to move the chat to the top
-      saveHistory(finalMessages, selectedModelId, selectedModelColor, true); 
 
-    } catch (err: any) {
-      setError(err.message || "Something went wrong");
-      setMessages(prev => prev.filter(m => m.id !== aiMsgId && m.id !== userMsg.id));
+      const finalMsg = { ...aiMsg, content: rawAccumulated };
+      const finalHistory = [...newMessages.filter(m => m.id !== userMsg.id), userMsg, finalMsg];
+
+      setMessages(finalHistory);
+      saveHistory(finalHistory, true); // Update date because a new message was sent
+    } catch (err) {
+      console.error(err);
+      // Remove staging messages on error
+      setMessages((prev) => prev.filter((m) => m.id !== aiMsgId && m.id !== userMsg.id));
     } finally {
       setIsLoading(false);
-      
-      setTimeout(() => {
-        inputRef.current?.focus(); 
-      }, 0); 
+      setTimeout(() => inputRef.current?.focus(), 0);
     }
   };
 
-  // --- Rendering ---
-  
-  const currentModelName = models.find(m => m.id === selectedModelId)?.id.split('/').pop() || 'Loading...';
-  
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
-      
-      {/* Sidebar: Chat History */}
-      <motion.div 
+    <div 
+      className="flex h-screen bg-[#09090b] text-zinc-100 font-sans overflow-hidden selection:bg-zinc-800 selection:text-white"
+      style={{
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        MozUserSelect: 'none',
+        msUserSelect: 'none',
+        WebkitUserDrag: 'none',
+        userDrag: 'none'
+      }}
+    >
+      <motion.div
         initial={{ x: -20, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className="w-64 border-r border-zinc-800 bg-zinc-900 p-4 flex flex-col gap-4 flex-shrink-0 shadow-2xl shadow-black/50"
+        className="w-[260px] bg-[#09090b] border-r border-zinc-800/50 flex flex-col flex-shrink-0"
+        style={{
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          flexShrink: 0,
+          position: 'relative'
+        }}
+        draggable={false}
       >
-        <motion.button 
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={startNewChat}
-          className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition shadow-lg shadow-purple-500/30"
-        >
-          <PlusCircle size={18} /> New AI Conversation
-        </motion.button>
-        
-        {/* Chat List Area */}
-        <div className="flex-1 overflow-y-auto pt-2 space-y-2">
-           <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-1">
-             <History size={14} /> Recent Chats
-           </div>
-           
-           <AnimatePresence initial={false}>
-             {chatList.map((chat) => (
-                <HistoryItem 
-                    key={chat.id} 
-                    chat={chat} 
-                    isActive={chat.id === chatId}
-                    onChatClick={handleHistoryClick}
-                    onDelete={deleteChat}
-                />
-             ))}
-           </AnimatePresence>
-           {chatList.length === 0 && <p className="text-sm text-zinc-600 italic px-2">No history saved.</p>}
+        <div className="p-3 select-none">
+          <button
+            onClick={startNewChat}
+            className="flex items-center gap-2 w-full px-3 py-2 bg-zinc-100 text-zinc-900 hover:bg-zinc-200 rounded-lg text-sm font-medium transition-colors select-none"
+            draggable={false}
+          >
+            <Plus size={16} /> New Chat
+          </button>
         </div>
-        
-        {/* User Profile Section */}
-        <div className="mt-auto border-t border-zinc-800 pt-4">
-            <motion.button
-                whileHover={{ backgroundColor: '#18181b', x: 2 }}
-                onClick={() => setIsSettingsOpen(true)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl text-left hover:bg-zinc-800 transition"
+
+        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 select-none">
+          <div className="text-[11px] font-medium text-zinc-500 px-2 mb-2 uppercase tracking-wider select-none">History</div>
+
+          {chatList.map((chat) => (
+            <div
+              key={chat.id}
+              onClick={() => loadChat(chat.id)}
+              className={cn(
+                'px-3 py-2 rounded-lg text-sm truncate cursor-pointer transition-all select-none',
+                chat.id === chatId
+                  ? 'bg-zinc-800 text-zinc-100'
+                  : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
+              )}
+              draggable={false}
             >
-                <div className="p-2 rounded-full bg-zinc-700">
-                    <User size={18} className="text-zinc-400" />
-                </div>
-                <span className="font-medium text-sm">User Settings</span>
-                <Settings size={16} className="ml-auto text-zinc-500" />
-            </motion.button>
+              {chat.title}
+            </div>
+          ))}
+        </div>
+
+        <div className="p-3 border-t border-zinc-800/50 select-none">
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex items-center gap-3 px-2 py-2 w-full rounded-lg hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-200 transition-all select-none"
+            draggable={false}
+          >
+            <div className="w-6 h-6 rounded bg-zinc-700 flex items-center justify-center">
+              <User size={14} />
+            </div>
+            <span className="text-sm font-medium">User</span>
+            <Settings size={14} className="ml-auto" />
+          </button>
         </div>
       </motion.div>
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col relative bg-gradient-to-br from-zinc-950 to-zinc-900">
-        
-        {/* Header (Model Selector) */}
-        <header className="h-16 border-b border-zinc-800 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-10 shadow-lg">
-           <motion.h1 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500"
+      <div className="flex-1 flex flex-col relative min-w-0">
+        <header className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-10 bg-[#09090b]/80 backdrop-blur-sm">
+          <div className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors">
+            <span className="text-sm font-medium select-none">
+              {models.find((m) => m.id === selectedModelId)?.id || 'Select Model'}
+            </span>
+            <ChevronDown size={14} />
+            <select
+              value={selectedModelId}
+              onChange={(e) => setSelectedModelId(e.target.value)}
+              className="absolute opacity-0 inset-0 cursor-pointer"
             >
-                Serenity Chat
-            </motion.h1>
-          <motion.select 
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            value={selectedModelId} 
-            onChange={(e) => setSelectedModelId(e.target.value)}
-            className="bg-zinc-800 border-zinc-700 border rounded-xl px-4 py-2 text-sm text-zinc-300 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer hover:bg-zinc-700 transition"
-          >
-            {models.length === 0 && <option value="">Loading models...</option>}
-            {models.map(m => (
-              <option key={m.id} value={m.id}>{m.id.split('/').pop()}</option>
-            ))}
-          </motion.select>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id}
+                </option>
+              ))}
+            </select>
+          </div>
         </header>
 
-        {/* Messages Container */}
         <div className="flex-1 overflow-y-auto scroll-smooth">
-          <div className="max-w-4xl mx-auto px-6 py-8 space-y-6"> 
-            
+          <div className="max-w-4xl mx-auto px-4 py-20">
             {messages.length === 0 && (
-              <motion.div 
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 0.7 }}
-                    transition={{ delay: 0.5, duration: 1 }}
-                    className="h-full flex flex-col items-center justify-center opacity-50 pt-20"
-              >
-                <Bot size={48} className="mb-4 text-zinc-600" />
-                <p className="text-lg font-medium text-zinc-500">How can I assist you today? Start a conversation.</p>
-                <p className="text-sm text-zinc-600 mt-2">Currently using {currentModelName}.</p>
-              </motion.div>
+              <div className="flex flex-col items-center justify-center min-h-[40vh] text-center space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-zinc-900 flex items-center justify-center mb-6 shadow-inner border border-zinc-800">
+                  <Terminal size={32} className="text-zinc-500" />
+                </div>
+                <h2 className="text-2xl font-semibold text-zinc-200 mb-2">
+                  How can I help you today?
+                </h2>
+              </div>
             )}
-            
+
             <AnimatePresence initial={false}>
               {messages.map((m) => (
-                <MessageBubble 
-                    key={m.id} 
-                    role={m.role} 
-                    content={m.content} 
-                    modelColor={m.modelColor || selectedModelColor} 
-                />
+                <MessageBubble key={m.id} {...m} />
               ))}
             </AnimatePresence>
-            
-            <div ref={messagesEndRef} />
-            
-            {error && (
-              <motion.div 
-                  initial={{ opacity: 0, y: 10 }} 
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex justify-center p-4"
-              >
-                <div className="bg-red-900/30 border border-red-800 text-red-400 px-4 py-3 rounded-xl flex items-center gap-2 text-sm max-w-md shadow-xl">
-                  <AlertCircle size={16} /> <span>{error}</span>
-                </div>
-              </motion.div>
+
+            {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
+              <div className="flex items-center gap-2 text-zinc-500 text-sm mt-4 ml-1">
+                <Loader2 size={14} className="animate-spin" /> Generating...
+              </div>
             )}
 
-          </div> 
+            <div ref={messagesEndRef} className="h-4" />
+          </div>
         </div>
 
-        {/* Input Area */}
-        <div className="p-4 border-t border-zinc-800 bg-zinc-900 shadow-2xl shadow-black/50">
-          <motion.form 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            onSubmit={onSubmit} 
-            className="max-w-4xl mx-auto relative flex items-center"
-          >
-            <textarea
-              ref={inputRef} 
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown} 
-              placeholder="Send a Message"
-              rows={Math.min(10, Math.max(1, input.split('\n').length))} 
-              className="w-full bg-zinc-800 text-zinc-100 rounded-xl px-6 py-4 pr-16 focus:outline-none focus:ring-2 focus:ring-blue-600/50 transition-all shadow-inner shadow-black/30 text-base resize-none overflow-y-auto"
-              disabled={isLoading || !selectedModelId}
-            />
-            <motion.button 
-              type="submit" 
-              whileHover={{ scale: 1.05, boxShadow: "0 0 10px rgba(99, 102, 241, 0.7)" }}
-              whileTap={{ scale: 0.95 }}
-              disabled={isLoading || !input.trim() || !selectedModelId}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 disabled:opacity-30 disabled:bg-zinc-700 disabled:cursor-not-allowed transition-all shadow-lg shadow-purple-500/40"
+        <div className="p-6 pt-2 bg-[#09090b]">
+          <div className="max-w-4xl mx-auto relative group">
+            <div className="absolute inset-0 bg-zinc-800/20 rounded-[28px] blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+            <form
+              onSubmit={onSubmit}
+              className="relative flex flex-col bg-zinc-900 border border-zinc-700/50 rounded-[26px] shadow-lg focus-within:border-zinc-600 focus-within:ring-1 focus-within:ring-zinc-700/50 transition-all overflow-hidden"
             >
-              <AnimatePresence mode="wait">
-                {isLoading 
-                  ? <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><Loader2 size={20} className="animate-spin" /></motion.div>
-                  : <motion.div key="send" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><Send size={20} /></motion.div>
-                }
-              </AnimatePresence>
-            </motion.button>
-          </motion.form>
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center mt-2 text-xs text-zinc-500"
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything..."
+                rows={1}
+                className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base px-5 py-4 focus:outline-none resize-none select-none max-h-[200px] min-h-[56px] overflow-hidden leading-relaxed max-w-full"
+                style={{ 
+                  height: '56px', 
+                  resize: 'none',
+                  overflow: 'hidden',
+                  userSelect: 'text'
+                }}
+                onInput={handleInputResize}
+                disabled={isLoading}
+                draggable={false}
+              />
+
+              <div className="flex justify-between items-center px-3 pb-3 pt-1 select-none">
+                <div className="flex gap-1"></div>
+                <button
+                  type="submit"
+                  disabled={isLoading || !input.trim()}
+                  className={cn(
+                    'p-2 rounded-full mb-0.5 transition-all duration-200 select-none',
+                    input.trim()
+                      ? 'bg-zinc-100 text-zinc-900 hover:bg-white shadow-md hover:shadow-zinc-100/20'
+                      : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                  )}
+                  draggable={false}
+                >
+                  <Send size={16} strokeWidth={2.5} />
+                </button>
+              </div>
+            </form>
+
+            <div className="text-center mt-3">
+              <p className="text-[11px] text-zinc-600 select-none">AI can make mistakes. Please use responsibly.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {isSettingsOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-[2px]"
+          onClick={() => setIsSettingsOpen(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-full max-w-md shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
           >
-             {selectedModelId ? `${currentModelName} can make mistakes. Check important info.` : 'No model selected'}
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-semibold text-zinc-100">Settings</h2>
+              <button className="text-zinc-500 hover:text-zinc-300" onClick={() => setIsSettingsOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between">
+              <span className="text-sm text-red-400 font-medium">Clear all chats</span>
+              <button
+                onClick={deleteAllChats}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-md transition-colors"
+              >
+                Delete
+              </button>
+            </div>
           </motion.div>
         </div>
-
-      </div>
-      
-      {/* Settings Modal */}
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} deleteAllChats={deleteAllChats} />
+      )}
     </div>
   );
 }

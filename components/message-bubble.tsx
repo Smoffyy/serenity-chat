@@ -1,96 +1,87 @@
-import { Bot, User } from 'lucide-react';
+"use client";
+
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight'; 
-import 'highlight.js/styles/atom-one-dark.css'; 
+import rehypeHighlight from 'rehype-highlight';
+import remarkBreaks from 'remark-breaks'; 
+import 'highlight.js/styles/atom-one-dark.css';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion'; 
+import { motion } from 'framer-motion';
 
 interface MessageBubbleProps {
   role: 'user' | 'assistant';
   content: string;
-  modelColor: string;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content, modelColor }) => {
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content }) => {
   const isUser = role === 'user';
-  
-  // Custom components for ReactMarkdown to apply the tightest Tailwind styles
+
   const MarkdownComponents: Record<string, React.FC<any>> = {
-    p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>, 
-    ul: ({ children }) => <ul className="list-disc list-inside space-y-0.5 mb-1 pl-3">{children}</ul>,
-    ol: ({ children }) => <ol className="list-decimal list-inside space-y-0.5 mb-1 pl-3">{children}</ol>,
-    
-    // Heading styling with gradient accents
-    h1: ({ children }) => <h1 className="text-xl font-extrabold mt-3 mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">{children}</h1>,
-    h2: ({ children }) => <h2 className="text-lg font-bold mt-3 mb-1 border-b border-zinc-700 pb-0.5 text-blue-300">{children}</h2>,
-    h3: ({ children }) => <h3 className="text-base font-bold mt-2 mb-0.5 text-purple-300">{children}</h3>,
-    
-    // Code block styling
+    p: ({ children }) => <p className="mb-3 last:mb-0 leading-7 whitespace-pre-wrap break-words">{children}</p>,
+    ul: ({ children }) => <ul className="list-disc list-outside space-y-1 mb-4 pl-5">{children}</ul>,
+    ol: ({ children }) => <ol className="list-decimal list-outside space-y-1 mb-4 pl-5">{children}</ol>,
+    h1: ({ children }) => <h1 className="text-2xl font-bold mt-6 mb-4 text-zinc-100">{children}</h1>,
+    h2: ({ children }) => <h2 className="text-xl font-bold mt-5 mb-3 text-zinc-100 border-b border-zinc-800 pb-2">{children}</h2>,
+    h3: ({ children }) => <h3 className="text-lg font-bold mt-4 mb-2 text-zinc-100">{children}</h3>,
+    a: ({ href, children }) => (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+        {children}
+      </a>
+    ),
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-2 border-zinc-600 pl-4 italic text-zinc-400 my-4">{children}</blockquote>
+    ),
     code: ({ node, className, children, ...props }) => {
       const match = /language-(\w+)/.exec(className || '');
-      if (!match) {
-        // Inline code
-        return <code className="bg-zinc-700 px-1 py-0.5 rounded text-sm font-mono text-cyan-300" {...props}>{children}</code>;
-      }
-      
-      // Code block
-      return (
-        <pre className="mt-1 mb-1 rounded-lg overflow-x-auto p-4 bg-zinc-900 shadow-inner">
-          <code className={cn(className, "text-sm")} {...props}>
+      const isInline = !match;
+
+      if (isInline) {
+        return (
+          <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-sm font-mono text-zinc-200" {...props}>
             {children}
           </code>
-        </pre>
+        );
+      }
+
+      return (
+        <div className="my-4 rounded-lg overflow-hidden border border-zinc-800 bg-[#0d0d0d]">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900 border-b border-zinc-800">
+            <span className="text-xs text-zinc-500 font-medium">{match![1]}</span>
+          </div>
+          <div className="p-4 overflow-x-auto">
+            <code className={cn(className, 'text-sm font-mono')} {...props}>
+              {children}
+            </code>
+          </div>
+        </div>
       );
     },
-    
-    // Blockquote styling
-    blockquote: ({ children }) => (
-      <blockquote className="border-l-4 border-purple-500 pl-3 py-1 italic text-zinc-400 my-2 bg-zinc-700/30 rounded-r-md">
-        {children}
-      </blockquote>
-    ),
+    br: () => <br />,
+    text: ({ children }) => <span className="whitespace-pre-wrap break-words">{children}</span>,
   };
 
   return (
     <motion.div
-        initial={{ opacity: 0, y: isUser ? 10 : -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
-        className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className={cn('w-full py-2', isUser ? 'flex justify-end' : 'flex justify-start')}
     >
-      <div 
+      <div
         className={cn(
-          "flex items-start gap-3 max-w-3xl", 
-          isUser ? "flex-row-reverse" : "flex-row"
+          'max-w-3xl', // Base max width for all content
+          isUser
+            ? 'w-fit bg-[#2f2f2f] text-zinc-100 px-5 py-3 rounded-[26px] rounded-tr-sm max-w-[85%] md:max-w-[70%]' // w-fit makes the bubble shrink to content
+            : 'w-full' // AI messages use the full width up to max-w-3xl
         )}
       >
-        {/* Avatar */}
-        <div 
-          className={cn(
-            "p-2 rounded-full flex-shrink-0 shadow-lg",
-            isUser ? "bg-gradient-to-br from-blue-500 to-cyan-500" : "bg-transparent border-2"
-          )}
-          style={!isUser ? { borderColor: modelColor, color: modelColor } : {}}
-        >
-          {isUser ? <User size={18} className="text-white" /> : <Bot size={18} />}
-        </div>
-        
-        {/* Message Content */}
-        <div 
-          className={cn(
-            "p-3 rounded-2xl shadow-xl text-base leading-relaxed transition-colors duration-300", 
-            isUser 
-              ? "bg-gradient-to-br from-blue-600 to-cyan-600 text-white rounded-br-none" 
-              : "bg-zinc-800 text-zinc-100 rounded-tl-none border border-zinc-700 hover:shadow-2xl hover:shadow-zinc-950/50"
-          )}
-        >
-          {/* CRITICAL: No skipHtml prop is used, so it treats all content as Markdown/Text */}
+        <div className={cn('prose prose-invert max-w-none', isUser ? 'text-[15px]' : 'text-[16px]')}>
           <ReactMarkdown
             components={MarkdownComponents}
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={[remarkGfm, remarkBreaks]}
             rehypePlugins={[rehypeHighlight]}
+            skipHtml={false}
           >
             {content}
           </ReactMarkdown>
