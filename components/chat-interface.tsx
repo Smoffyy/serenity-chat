@@ -594,9 +594,9 @@ export default function ChatInterface() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500"
+                className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500"
             >
-                AI Chat Interface
+                Serenity Chat
             </motion.h1>
           <motion.select 
             initial={{ opacity: 0, y: -5 }}
@@ -626,7 +626,7 @@ export default function ChatInterface() {
               >
                 <Bot size={48} className="mb-4 text-zinc-600" />
                 <p className="text-lg font-medium text-zinc-500">How can I assist you today? Start a conversation.</p>
-                <p className="text-sm text-zinc-600 mt-2">Currently using **{currentModelName}**.</p>
+                <p className="text-sm text-zinc-600 mt-2">Currently using {currentModelName}.</p>
               </motion.div>
             )}
             
@@ -672,7 +672,7 @@ export default function ChatInterface() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown} 
-              placeholder="Send a message (Shift+Enter for new line)..."
+              placeholder="Send a Message"
               rows={Math.min(10, Math.max(1, input.split('\n').length))} 
               className="w-full bg-zinc-800 text-zinc-100 rounded-xl px-6 py-4 pr-16 focus:outline-none focus:ring-2 focus:ring-blue-600/50 transition-all shadow-inner shadow-black/30 text-base resize-none overflow-y-auto"
               disabled={isLoading || !selectedModelId}
@@ -697,7 +697,7 @@ export default function ChatInterface() {
             animate={{ opacity: 1 }}
             className="text-center mt-2 text-xs text-zinc-500"
           >
-             {selectedModelId ? `Currently using ${currentModelName}` : 'No model selected'}
+             {selectedModelId ? `${currentModelName} can make mistakes. Check important info.` : 'No model selected'}
           </motion.div>
         </div>
 
