@@ -27,14 +27,199 @@ interface ModelData {
 
 const generateRandomColor = () => {
   const colors = [
-    '#EF4444', 
-    '#3B82F6', 
-    '#10B981', 
-    '#F59E0B', 
-    '#8B5CF6', 
-    '#EC4899', 
+    '#6366F1', // Indigo
+    '#3B82F6', // Blue
+    '#06B6D4', // Cyan
+    '#A855F7', // Purple
+    '#EC4899', // Pink
   ];
-  return colors[Math.floor(Math.random() * colors.length)];
+  const getRandomInt = (min: number, max: number) => {
+      min = Math.ceil(min);
+      max = Math.floor(max);
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+  return colors[Math.floor(getRandomInt(0, colors.length - 1))];
+};
+
+
+// History Item Component with Motion (Restored/Maintained the superior dark-gradient look)
+const HistoryItem: React.FC<{ 
+    chat: ChatMetadata, 
+    isActive: boolean, 
+    onChatClick: (e: MouseEvent, chat: ChatMetadata) => void, 
+    onDelete: (id: string) => void 
+}> = ({ chat, isActive, onChatClick, onDelete }) => {
+    const [showMenu, setShowMenu] = useState(false);
+    const [isHovered, setIsHovered] = useState(false);
+    const [isShiftDown, setIsShiftDown] = useState(false);
+    
+    // Effect to track the Shift key state globally
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Shift') {
+                setIsShiftDown(true);
+            }
+        };
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.key === 'Shift') {
+                setIsShiftDown(false);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown as any);
+        window.addEventListener('keyup', handleKeyUp as any);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown as any);
+            window.removeEventListener('keyup', handleKeyUp as any);
+        };
+    }, []);
+
+    const handleMenuToggle = (e: MouseEvent) => {
+        e.stopPropagation();
+        setShowMenu(prev => !prev);
+    };
+
+    const confirmAndDelete = (e: MouseEvent) => {
+        e.stopPropagation();
+        if (window.confirm(`Are you sure you want to delete chat: "${chat.title}"?`)) {
+            onDelete(chat.id);
+        }
+        setShowMenu(false);
+    };
+    
+    // Handler for the trash icon click (used when Shift is held)
+    const handleShiftDeleteClick = (e: MouseEvent) => {
+        e.stopPropagation();
+        confirmAndDelete(e);
+    };
+    
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => {
+            if (showMenu) {
+                setShowMenu(false);
+            }
+        };
+        window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, [showMenu]);
+
+    const showTrashIcon = isHovered && isShiftDown;
+
+    return (
+        <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            layout 
+            onClick={(e) => onChatClick(e, chat)}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            className={cn(
+                "flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-all group relative cursor-pointer overflow-visible",
+                isActive 
+                    ? "bg-blue-600/20 text-blue-300 font-medium border border-blue-600/50 shadow-md" 
+                    : "text-zinc-300 hover:bg-zinc-800 hover:border-zinc-700 border border-transparent"
+            )}
+        >
+            <span className="flex-1 text-left truncate" title={chat.title}>
+                {chat.title}
+            </span>
+            
+            {/* Action Menu Button */}
+            <div className="flex-shrink-0">
+                {(isHovered || showMenu) && (
+                    <div className="flex items-center gap-1">
+                        {/* Trash Icon for Shift + Click */}
+                        {showTrashIcon && (
+                            <motion.button
+                                key="trash-icon"
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.8 }}
+                                onClick={handleShiftDeleteClick}
+                                className={cn(
+                                    "p-1 rounded-full transition-colors bg-red-500/10 text-red-500 hover:bg-red-500/30",
+                                )}
+                                title="Click to delete"
+                            >
+                                <Trash2 size={16} />
+                            </motion.button>
+                        )}
+                        
+                        {/* Three-dot menu button */}
+                        {!showTrashIcon && (
+                            <motion.button
+                                key="more-icon"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={handleMenuToggle}
+                                className={cn(
+                                    "p-1 rounded-full transition-colors opacity-0 group-hover:opacity-100",
+                                    isActive ? "text-blue-400" : "text-zinc-500 hover:bg-zinc-700",
+                                    showMenu && "bg-zinc-700 opacity-100"
+                                )}
+                            >
+                                <MoreVertical size={16} />
+                            </motion.button>
+                        )}
+                    </div>
+                )}
+                
+                {/* Deletion Menu (Dropdown) */}
+                {showMenu && (
+                    <div className="absolute right-0 top-full mt-1 w-40 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-20">
+                        <button 
+                            onClick={confirmAndDelete}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                        >
+                            <Trash2 size={14} /> Delete Chat
+                        </button>
+                    </div>
+                )}
+            </div>
+        </motion.div>
+    );
+};
+
+// Settings Modal Component (Restored/Maintained the superior dark-gradient look)
+const SettingsModal: React.FC<{ isOpen: boolean, onClose: () => void, deleteAllChats: () => void }> = ({ isOpen, onClose, deleteAllChats }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center backdrop-blur-sm">
+            <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="bg-zinc-900 p-8 rounded-2xl w-full max-w-md shadow-2xl border border-zinc-800"
+            >
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold flex items-center gap-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400"><Settings size={24} /> Settings</h2>
+                    <button onClick={onClose} className="p-2 rounded-full text-zinc-400 hover:bg-zinc-800 transition"><X size={20} /></button>
+                </div>
+                
+                <div className="space-y-6">
+                    <h3 className="text-lg font-semibold text-zinc-300 border-b border-zinc-700 pb-2">Data Management</h3>
+                    <div className="flex justify-between items-center p-4 bg-red-900/20 rounded-xl border border-red-800/50">
+                        <span className="text-red-400 font-medium">Permanently Delete All Chat History</span>
+                        <button
+                            onClick={() => { 
+                                if (window.confirm("Are you sure you want to permanently delete ALL chat history? This action cannot be undone.")) {
+                                    deleteAllChats();
+                                }
+                            }}
+                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-medium text-sm shadow-lg hover:shadow-red-500/30"
+                        >
+                            Delete All
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    );
 };
 
 
@@ -52,7 +237,7 @@ export default function ChatInterface() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null); // Ref for the input textarea
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // --- Utility Functions ---
 
@@ -121,8 +306,9 @@ export default function ChatInterface() {
       setMessages([]);
     }
     
-    // Ensure input is focused when loading an existing chat
-    inputRef.current?.focus(); 
+    setTimeout(() => {
+        inputRef.current?.focus(); 
+    }, 0); 
 
   }, [messages, selectedModelId, selectedModelColor, saveHistory]);
 
@@ -140,20 +326,18 @@ export default function ChatInterface() {
         setSelectedModelColor(models[0].color);
     }
     
-    // Ensure input is focused when starting a new chat
-    inputRef.current?.focus(); 
+    setTimeout(() => {
+        inputRef.current?.focus(); 
+    }, 0); 
   };
   
   const deleteChat = (idToDelete: string) => {
-      // 1. Remove from localStorage
       localStorage.removeItem(`chat_${idToDelete}`);
 
-      // 2. Remove from chat list metadata
       const updatedList = chatList.filter(chat => chat.id !== idToDelete);
       localStorage.setItem('all_chats', JSON.stringify(updatedList));
       setChatList(updatedList);
       
-      // 3. Handle active chat
       if (idToDelete === chatId) {
           if (updatedList.length > 0) {
               const nextChat = updatedList[0];
@@ -164,7 +348,6 @@ export default function ChatInterface() {
       }
   };
   
-  // Delete All Chats Logic
   const deleteAllChats = () => {
       const currentList = getChatMetadata();
       currentList.forEach(chat => {
@@ -217,7 +400,9 @@ export default function ChatInterface() {
           setSelectedModelColor(initialColor);
           
           // Initial focus on load
-          inputRef.current?.focus(); 
+          setTimeout(() => {
+            inputRef.current?.focus(); 
+          }, 0); 
         }
       } catch (err: any) {
         setError(`Initialization Error: ${err.message || "Failed to connect to Local AI models."}`);
@@ -237,8 +422,8 @@ export default function ChatInterface() {
 
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages, isLoading]);
 
 
   // --- Event Handlers ---
@@ -264,7 +449,6 @@ export default function ChatInterface() {
     setInput(''); 
     setError(null);
 
-    // Fix for user newlines not rendering in Markdown
     userText = userText.replace(/\n(?!\n)/g, '\n\n'); 
     userText = userText.trim();
 
@@ -275,7 +459,7 @@ export default function ChatInterface() {
     setIsLoading(true);
 
     const aiMsgId = (Date.now() + 1).toString();
-    const aiMsg: Message = { id: aiMsgId, role: 'assistant', content: "Thinking..." };
+    const aiMsg: Message = { id: aiMsgId, role: 'assistant', content: "Thinking..." }; 
     setMessages(prev => [...prev, aiMsg]);
 
 
@@ -305,7 +489,7 @@ export default function ChatInterface() {
 
         const chunk = decoder.decode(value, { stream: true });
         accumulatedContent += chunk;
-
+        
         setMessages(currentMsgs => 
           currentMsgs.map(msg => 
             msg.id === aiMsgId 
@@ -314,8 +498,8 @@ export default function ChatInterface() {
           )
         );
       }
-
-      const finalMessages = [...messagesToSend, { ...aiMsg, content: accumulatedContent, modelColor: selectedModelColor }];
+      
+      const finalMessages = [...messagesToSend, { ...aiMsg, content: accumulatedContent, modelColor: selectedModelColor }]; 
       setMessages(finalMessages); 
       saveHistory(finalMessages, selectedModelId, selectedModelColor); 
 
@@ -325,9 +509,6 @@ export default function ChatInterface() {
     } finally {
       setIsLoading(false);
       
-      // *** FINAL AUTO-FOCUS FIX ***
-      // Use setTimeout(0) to ensure the focus command runs AFTER React finishes 
-      // updating the DOM and clearing the input state (setInput('')).
       setTimeout(() => {
         inputRef.current?.focus(); 
       }, 0); 
@@ -339,24 +520,26 @@ export default function ChatInterface() {
   const currentModelName = models.find(m => m.id === selectedModelId)?.id.split('/').pop() || 'Loading...';
   
   return (
-    <div className="flex h-screen bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-sans overflow-hidden">
+    <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
       
       {/* Sidebar: Chat History */}
       <motion.div 
         initial={{ x: -20, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
-        transition={{ duration: 0.3 }}
-        className="w-64 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 flex flex-col gap-4 flex-shrink-0"
+        transition={{ duration: 0.5 }}
+        className="w-64 border-r border-zinc-800 bg-zinc-900 p-4 flex flex-col gap-4 flex-shrink-0 shadow-2xl shadow-black/50"
       >
-        <button 
+        <motion.button 
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
           onClick={startNewChat}
-          className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-blue-600 text-white dark:bg-blue-700 rounded-xl font-medium hover:bg-blue-700 dark:hover:bg-blue-800 transition shadow-lg shadow-blue-500/30"
+          className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition shadow-lg shadow-purple-500/30"
         >
-          <PlusCircle size={18} /> Start New Chat
-        </button>
+          <PlusCircle size={18} /> New AI Conversation
+        </motion.button>
         
         {/* Chat List Area */}
-        <div className="flex-1 overflow-y-auto pt-2">
+        <div className="flex-1 overflow-y-auto pt-2 space-y-2">
            <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-1">
              <History size={14} /> Recent Chats
            </div>
@@ -372,36 +555,45 @@ export default function ChatInterface() {
                 />
              ))}
            </AnimatePresence>
-           {chatList.length === 0 && <p className="text-sm text-zinc-400 italic px-2">No history saved.</p>}
+           {chatList.length === 0 && <p className="text-sm text-zinc-600 italic px-2">No history saved.</p>}
         </div>
         
         {/* User Profile Section */}
-        <div className="mt-auto border-t border-zinc-200 dark:border-zinc-800 pt-4">
-            <button
+        <div className="mt-auto border-t border-zinc-800 pt-4">
+            <motion.button
+                whileHover={{ backgroundColor: '#18181b', x: 2 }}
                 onClick={() => setIsSettingsOpen(true)}
-                className="w-full flex items-center gap-3 p-2 rounded-xl text-left hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+                className="w-full flex items-center gap-3 p-3 rounded-xl text-left hover:bg-zinc-800 transition"
             >
-                <div className="p-2 rounded-full bg-zinc-200 dark:bg-zinc-700">
-                    <User size={18} className="text-zinc-600 dark:text-zinc-300" />
+                <div className="p-2 rounded-full bg-zinc-700">
+                    <User size={18} className="text-zinc-400" />
                 </div>
-                <span className="font-medium text-sm">User</span>
-                <Settings size={16} className="ml-auto text-zinc-400" />
-            </button>
+                <span className="font-medium text-sm">User Settings</span>
+                <Settings size={16} className="ml-auto text-zinc-500" />
+            </motion.button>
         </div>
       </motion.div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col relative">
+      <div className="flex-1 flex flex-col relative bg-gradient-to-br from-zinc-950 to-zinc-900">
         
-        {/* Header */}
-        <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-end px-6 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-10">
+        {/* Header (Model Selector) */}
+        <header className="h-16 border-b border-zinc-800 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-10 shadow-lg">
+           <motion.h1 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500"
+            >
+                AI Chat Interface
+            </motion.h1>
           <motion.select 
             initial={{ opacity: 0, y: -5 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+            transition={{ delay: 0.3 }}
             value={selectedModelId} 
             onChange={(e) => setSelectedModelId(e.target.value)}
-            className="bg-zinc-100 dark:bg-zinc-800 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
+            className="bg-zinc-800 border-zinc-700 border rounded-xl px-4 py-2 text-sm text-zinc-300 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer hover:bg-zinc-700 transition"
           >
             {models.length === 0 && <option value="">Loading models...</option>}
             {models.map(m => (
@@ -412,16 +604,22 @@ export default function ChatInterface() {
 
         {/* Messages Container */}
         <div className="flex-1 overflow-y-auto scroll-smooth">
-          <div className="max-w-4xl mx-auto px-6 py-6 space-y-4"> 
+          <div className="max-w-4xl mx-auto px-6 py-8 space-y-6"> 
             
             {messages.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center opacity-50 pt-20">
-                <Bot size={48} className="mb-4 text-zinc-300" />
-                <p className="text-lg font-medium">Select a model and start chatting.</p>
-              </div>
+              <motion.div 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 0.7 }}
+                    transition={{ delay: 0.5, duration: 1 }}
+                    className="h-full flex flex-col items-center justify-center opacity-50 pt-20"
+              >
+                <Bot size={48} className="mb-4 text-zinc-600" />
+                <p className="text-lg font-medium text-zinc-500">How can I assist you today? Start a conversation.</p>
+                <p className="text-sm text-zinc-600 mt-2">Currently using **{currentModelName}**.</p>
+              </motion.div>
             )}
             
-            <AnimatePresence>
+            <AnimatePresence initial={false}>
               {messages.map((m) => (
                 <MessageBubble 
                     key={m.id} 
@@ -440,7 +638,7 @@ export default function ChatInterface() {
                   animate={{ opacity: 1, y: 0 }}
                   className="flex justify-center p-4"
               >
-                <div className="bg-red-100 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-2 text-sm max-w-md shadow-md">
+                <div className="bg-red-900/30 border border-red-800 text-red-400 px-4 py-3 rounded-xl flex items-center gap-2 text-sm max-w-md shadow-xl">
                   <AlertCircle size={16} /> <span>{error}</span>
                 </div>
               </motion.div>
@@ -450,11 +648,11 @@ export default function ChatInterface() {
         </div>
 
         {/* Input Area */}
-        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+        <div className="p-4 border-t border-zinc-800 bg-zinc-900 shadow-2xl shadow-black/50">
           <motion.form 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.4 }}
             onSubmit={onSubmit} 
             className="max-w-4xl mx-auto relative flex items-center"
           >
@@ -465,13 +663,15 @@ export default function ChatInterface() {
               onKeyDown={handleKeyDown} 
               placeholder="Send a message (Shift+Enter for new line)..."
               rows={Math.min(10, Math.max(1, input.split('\n').length))} 
-              className="w-full bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl px-6 py-4 pr-14 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-xl dark:shadow-none text-base resize-none overflow-y-auto"
+              className="w-full bg-zinc-800 text-zinc-100 rounded-xl px-6 py-4 pr-16 focus:outline-none focus:ring-2 focus:ring-blue-600/50 transition-all shadow-inner shadow-black/30 text-base resize-none overflow-y-auto"
               disabled={isLoading || !selectedModelId}
             />
-            <button 
+            <motion.button 
               type="submit" 
+              whileHover={{ scale: 1.05, boxShadow: "0 0 10px rgba(99, 102, 241, 0.7)" }}
+              whileTap={{ scale: 0.95 }}
               disabled={isLoading || !input.trim() || !selectedModelId}
-              className="absolute right-2 bottom-2 p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-30 disabled:bg-zinc-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-500/50"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 disabled:opacity-30 disabled:bg-zinc-700 disabled:cursor-not-allowed transition-all shadow-lg shadow-purple-500/40"
             >
               <AnimatePresence mode="wait">
                 {isLoading 
@@ -479,14 +679,14 @@ export default function ChatInterface() {
                   : <motion.div key="send" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><Send size={20} /></motion.div>
                 }
               </AnimatePresence>
-            </button>
+            </motion.button>
           </motion.form>
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-center mt-2 text-xs text-zinc-400"
+            className="text-center mt-2 text-xs text-zinc-500"
           >
-             {selectedModelId ? `Using ${currentModelName}` : 'No model selected'}
+             {selectedModelId ? `Currently using ${currentModelName}` : 'No model selected'}
           </motion.div>
         </div>
 
@@ -497,260 +697,3 @@ export default function ChatInterface() {
     </div>
   );
 }
-
-// --- HISTORY ITEM AND SETTINGS COMPONENTS ---
-
-// Settings Modal Component
-interface SettingsModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    deleteAllChats: () => void;
-}
-
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, deleteAllChats }) => {
-    const [activeTab, setActiveTab] = useState('Chat');
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/70 backdrop-blur-sm" onClick={onClose}>
-            <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.2 }}
-                className="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl w-full max-w-2xl h-3/4 max-h-[600px] flex flex-col"
-                onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
-            >
-                {/* Header */}
-                <div className="flex justify-between items-center p-5 border-b border-zinc-200 dark:border-zinc-800">
-                    <h2 className="text-xl font-bold flex items-center gap-2">
-                        <Settings size={20} /> Settings
-                    </h2>
-                    <button onClick={onClose} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition">
-                        <X size={20} />
-                    </button>
-                </div>
-
-                <div className="flex flex-1 overflow-hidden">
-                    {/* Sidebar */}
-                    <div className="w-40 border-r border-zinc-200 dark:border-zinc-800 p-4 flex flex-col gap-1">
-                        <button
-                            onClick={() => setActiveTab('Chat')}
-                            className={cn(
-                                "flex items-center gap-2 p-3 rounded-lg text-sm transition text-left",
-                                activeTab === 'Chat' 
-                                    ? "bg-blue-600 text-white font-medium" 
-                                    : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                            )}
-                        >
-                            <History size={16} /> Chat
-                        </button>
-                        {/* Future tabs can go here */}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 p-6 overflow-y-auto">
-                        <AnimatePresence mode="wait">
-                            {activeTab === 'Chat' && (
-                                <motion.div
-                                    key="chat-settings"
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -20 }}
-                                    transition={{ duration: 0.15 }}
-                                >
-                                    <h3 className="text-lg font-semibold mb-4">Chat History</h3>
-
-                                    <div className="p-4 border border-red-500/20 bg-red-500/5 dark:bg-red-500/10 rounded-xl">
-                                        <p className="font-medium text-red-500 flex items-center gap-2 mb-3">
-                                            <AlertCircle size={18} /> Danger Zone
-                                        </p>
-                                        <div className="flex justify-between items-center">
-                                            <p className="text-sm">Delete all chat history and saved metadata.</p>
-                                            
-                                            {!showDeleteConfirm ? (
-                                                <button
-                                                    onClick={() => setShowDeleteConfirm(true)}
-                                                    className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition font-medium"
-                                                >
-                                                    Delete All Messages
-                                                </button>
-                                            ) : (
-                                                <motion.div 
-                                                    initial={{ opacity: 0 }}
-                                                    animate={{ opacity: 1 }}
-                                                    className="flex items-center gap-2"
-                                                >
-                                                    <button
-                                                        onClick={() => {
-                                                            if (window.confirm("ARE YOU ABSOLUTELY SURE? This action cannot be undone and will permanently delete ALL chat history.")) {
-                                                                deleteAllChats();
-                                                            }
-                                                        }}
-                                                        className="px-4 py-2 bg-red-700 text-white rounded-lg text-sm hover:bg-red-800 transition font-medium"
-                                                    >
-                                                        Confirm Delete
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setShowDeleteConfirm(false)}
-                                                        className="px-4 py-2 bg-zinc-300 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-lg text-sm hover:bg-zinc-400 dark:hover:bg-zinc-600 transition"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                </motion.div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
-                </div>
-            </motion.div>
-        </div>
-    );
-};
-
-
-// History Item Component for sidebar
-interface HistoryItemProps {
-    chat: ChatMetadata;
-    isActive: boolean;
-    onChatClick: (e: MouseEvent, chat: ChatMetadata) => void;
-    onDelete: (chatId: string) => void;
-}
-
-const HistoryItem: React.FC<HistoryItemProps> = ({ chat, isActive, onChatClick, onDelete }) => {
-    const [isHovered, setIsHovered] = useState(false);
-    const [showMenu, setShowMenu] = useState(false);
-    const [isShiftDown, setIsShiftDown] = useState(false);
-    
-    // Effect to track the Shift key state globally
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Shift') {
-                setIsShiftDown(true);
-            }
-        };
-        const handleKeyUp = (e: KeyboardEvent) => {
-            if (e.key === 'Shift') {
-                setIsShiftDown(false);
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown as any);
-        window.addEventListener('keyup', handleKeyUp as any);
-
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown as any);
-            window.removeEventListener('keyup', handleKeyUp as any);
-        };
-    }, []);
-
-    // Function to handle the final delete action with confirmation
-    const confirmAndDelete = (e: MouseEvent) => {
-        e.stopPropagation();
-        if (window.confirm(`Are you sure you want to delete "${chat.title}"?`)) {
-            onDelete(chat.id);
-        }
-        setShowMenu(false);
-    };
-    
-    // Handler for the trash icon click (used when Shift is held)
-    const handleShiftDeleteClick = (e: MouseEvent) => {
-        e.stopPropagation();
-        confirmAndDelete(e);
-    };
-    
-    // Handler for the three-dot menu click
-    const handleMenuToggle = (e: MouseEvent) => {
-        e.stopPropagation(); 
-        setShowMenu(prev => !prev);
-    };
-    
-    // Check if the trash icon should be visually active/shown
-    const showTrashIcon = isHovered && isShiftDown;
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={(e) => onChatClick(e, chat)}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => {
-                setIsHovered(false);
-            }}
-            className={cn(
-                "p-3 mb-2 rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-between gap-3 relative overflow-visible",
-                isActive 
-                    ? "bg-blue-500/10 text-blue-400 font-medium border border-blue-500/30"
-                    : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 group"
-            )}
-        >
-            <div className="flex items-center gap-3 min-w-0 flex-grow">
-                <div 
-                    className="w-2 h-2 rounded-full flex-shrink-0" 
-                    style={{ backgroundColor: chat.color }}
-                />
-                <span className="text-sm truncate leading-tight">{chat.title}</span>
-            </div>
-            
-            {(isHovered || showMenu) && (
-                <div className="flex-shrink-0 flex items-center gap-1">
-                    
-                    {/* Trash Icon for Shift + Click */}
-                    {showTrashIcon && (
-                        <motion.button
-                            key="trash-icon"
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.8 }}
-                            onClick={handleShiftDeleteClick}
-                            className={cn(
-                                "p-1 rounded-full transition-colors bg-red-500/10 text-red-500 hover:bg-red-500/30",
-                            )}
-                            title="Click to delete"
-                        >
-                            <Trash2 size={16} />
-                        </motion.button>
-                    )}
-
-                    {/* Three-dot menu button */}
-                    {!showTrashIcon && (
-                        <motion.button
-                            key="more-icon"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={handleMenuToggle}
-                            className={cn(
-                                "p-1 rounded-full transition-colors",
-                                isActive ? "text-blue-400" : "text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700",
-                                showMenu && "bg-zinc-200 dark:bg-zinc-700"
-                            )}
-                        >
-                            <MoreVertical size={16} />
-                        </motion.button>
-                    )}
-                    
-                    {/* Deletion Menu (Dropdown) */}
-                    {showMenu && (
-                        <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl z-20">
-                            <button 
-                                onClick={confirmAndDelete}
-                                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-500/10 rounded-lg"
-                            >
-                                <Trash2 size={14} /> Delete Chat
-                            </button>
-                        </div>
-                    )}
-                </div>
-            )}
-        </motion.div>
-    );
-};
