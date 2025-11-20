@@ -591,7 +591,7 @@ export default function ChatInterface() {
 
         {/* Message Container */}
         <div className="flex-1 overflow-y-auto scroll-smooth pt-14">
-          <div className="max-w-4xl mx-auto px-4 py-20">
+          <div className="max-w-4xl mx-auto px-4 py-1">
             {messages.length === 0 && (
               <motion.div 
                 initial={{ opacity: 0, y: 20 }}
@@ -605,7 +605,7 @@ export default function ChatInterface() {
                 <h2 className="text-2xl font-semibold text-zinc-200 mb-2">
                   How can I help you today?
                 </h2>
-                <p className="text-zinc-500">Using **{currentModelName}** from LM Studio.</p>
+                <p className="text-zinc-500">Using {currentModelName} for inference.</p>
               </motion.div>
             )}
 
@@ -658,7 +658,7 @@ export default function ChatInterface() {
                 onChange={handleInputTextChange} // Using combined change/resize handler
                 onKeyDown={handleKeyDown}
                 onKeyUp={handleKeyUp}
-                placeholder={isLoading ? "Generating response..." : "Ask anything (Shift+Enter for newline)..."}
+                placeholder={isLoading ? "Generating response..." : "Ask anything"}
                 rows={1}
                 className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base px-5 py-4 focus:outline-none resize-none [resize:none] max-h-[200px] min-h-[56px] overflow-hidden leading-relaxed max-w-full"
                 style={{ 
