@@ -92,6 +92,9 @@ export default function ChatInterface() {
   const [hasCodeBlock, setHasCodeBlock] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [showCopyButton, setShowCopyButton] = useState(false);
+  
+  // New State for Cursor Toggle (Default off)
+  const [isCursorEnabled, setIsCursorEnabled] = useState(false);
 
   /* ---------- Refs ---------- */
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -143,6 +146,13 @@ export default function ChatInterface() {
     },
     [chatId, getChatMetadata]
   );
+
+  /* ---------- Settings Logic ---------- */
+  const toggleCursor = () => {
+    const newState = !isCursorEnabled;
+    setIsCursorEnabled(newState);
+    localStorage.setItem("cursor_enabled", String(newState));
+  };
 
   /* ---------- Chat loading logic ---------- */
   const loadChat = useCallback(
@@ -298,6 +308,14 @@ export default function ChatInterface() {
 
     const savedDefaultModel = localStorage.getItem("default_model") || "";
     setDefaultModelId(savedDefaultModel);
+
+    // Load cursor setting
+    const savedCursorSetting = localStorage.getItem("cursor_enabled");
+    if (savedCursorSetting === "true") {
+      setIsCursorEnabled(true);
+    } else {
+      setIsCursorEnabled(false);
+    }
 
     fetch("/api/models")
       .then((res) => res.json())
@@ -708,6 +726,7 @@ export default function ChatInterface() {
                   {...m}
                   showCursor={
                     isLoading &&
+                    isCursorEnabled && // Only show if enabled in settings
                     m.id === messages[messages.length - 1]?.id &&
                     m.role === "assistant"
                   }
@@ -731,7 +750,7 @@ export default function ChatInterface() {
                   >
                     ***Model is thinking...***
                   </motion.span>
-                  <TypingCursor />
+                  {isCursorEnabled && <TypingCursor />}
                 </div>
               </div>
             )}
@@ -852,6 +871,37 @@ export default function ChatInterface() {
                   <X size={20} />
                 </motion.button>
               </div>
+
+              <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 }}
+                  className="flex items-center justify-between p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-xl mb-4"
+              >
+                <div className="flex flex-col">
+                  <span className="text-sm text-zinc-300 font-medium">
+                    Streaming Cursor
+                  </span>
+                  <span className="text-[11px] text-zinc-500 mt-0.5">
+                    Show a blinking cursor while generating response.
+                  </span>
+                </div>
+
+                <motion.button
+                  onClick={toggleCursor}
+                  className={cn(
+                    "w-11 h-6 rounded-full p-1 flex items-center transition-colors shadow-inner",
+                    isCursorEnabled ? "bg-zinc-100" : "bg-zinc-700"
+                  )}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <motion.div
+                    className={cn("w-4 h-4 rounded-full shadow-sm", isCursorEnabled ? "bg-zinc-900" : "bg-zinc-400")}
+                    animate={{ x: isCursorEnabled ? 20 : 0 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                </motion.button>
+              </motion.div>
 
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
