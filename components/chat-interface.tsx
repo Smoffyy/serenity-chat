@@ -755,16 +755,17 @@ export default function ChatInterface() {
                   isLoading ? "Generating response..." : "How can I help you today?"
                 }
                 rows={1}
-                className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base px-5 py-4 focus:outline-none resize-none [resize:none] max-h-[200px] min-h-[56px] overflow-hidden leading-relaxed max-w-full"
+                wrap="off"
+                className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base px-5 py-4 focus:outline-none max-h-[200px] min-h-[56px] overflow-hidden leading-relaxed max-w-full"
                 style={{
                   height: "56px",
                   resize: "none",
-                  overflow: "hidden",
-                  userSelect: "text",
+                  overflowY: "auto",
+                  overflowX: "auto",
+                  whiteSpace: "pre",
                 }}
                 disabled={isLoading}
               />
-
               <div className="flex justify-end items-center px-3 pb-3 pt-1">
                 <motion.button
                   type="submit"
