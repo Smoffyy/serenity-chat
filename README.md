@@ -3,7 +3,7 @@
 This project aims to make a very aestetically pleasing front end UI for users using an openai-compatable API. Also this project has been heavily vibe-coded, as I've been wanting to use my local AI experts.
 
 
-
+![alt text](image.png)
 
 ### Next.js stuff
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
