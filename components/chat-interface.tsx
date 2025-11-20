@@ -44,7 +44,7 @@ interface ModelData {
 }
 
 /**
- * Global spring configuration – typed as `Transition` to satisfy Framer‑Motion.
+ * Global spring configuration – typed as `Transition` to satisfy Framer–Motion.
  */
 const spring: Transition = {
   type: "spring",
@@ -211,12 +211,12 @@ export default function ChatInterface() {
     setTimeout(() => setIsModelDropdownOpen(false), 150);
   };
 
-  /* ---------- Input change handler (auto‑resize) ---------- */
+  /* ---------- Input change handler (auto–resize) ---------- */
   const handleInputTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget;
     setInput(el.value);
 
-    // Auto‑resize logic
+    // Auto–resize logic
     el.style.height = "auto";
     const scrollHeight = el.scrollHeight;
     const newHeight = Math.min(Math.max(scrollHeight, 56), 200);
@@ -256,7 +256,6 @@ export default function ChatInterface() {
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.resize = "none";
-      inputRef.current.style.overflow = "hidden";
 
       // Custom focus/blur handlers
       inputRef.current.onfocus = () => setIsInputFocused(true);
@@ -264,7 +263,7 @@ export default function ChatInterface() {
     }
   }, []);
 
-  /* ---------- Click‑outside for dropdowns & menus ---------- */
+  /* ---------- Click–outside for dropdowns & menus ---------- */
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -474,7 +473,7 @@ export default function ChatInterface() {
                   )}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* Quick‑delete icon */}
+                  {/* Quick–delete icon */}
                   {isShiftPressed && chat.id !== chatId && (
                     <motion.button
                       initial={{ scale: 0.5, rotate: -45 }}
@@ -510,7 +509,7 @@ export default function ChatInterface() {
                   </motion.button>
                 </div>
 
-                {/* Context menu pop‑up */}
+                {/* Context menu pop–up */}
                 <AnimatePresence>
                   {activeMenuId === chat.id && (
                     <motion.div
@@ -760,9 +759,10 @@ export default function ChatInterface() {
                 style={{
                   height: "56px",
                   resize: "none",
+                  overflowX: "hidden",
                   overflowY: "auto",
-                  overflowX: "auto",
-                  whiteSpace: "pre",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
                 }}
                 disabled={isLoading}
               />
