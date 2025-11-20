@@ -20,11 +20,18 @@ interface MessageBubbleProps {
   showCursor?: boolean; 
 }
 
+// Global Spring Configuration for Message Bubbles
+const spring = {
+  type: "spring",
+  stiffness: 400,
+  damping: 30,
+};
+
 // Blinking Cursor Component - UPDATED STYLING
 const TypingCursor = () => (
     <motion.span
         aria-hidden="true"
-        className="inline-block w-[10px] h-4 ml-0.5 bg-white align-middle translate-y-[0px]"
+        className="inline-block w-[10px] h-4 ml-0.5 bg-white align-middle translate-y-[0px]" // New color
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{
@@ -49,12 +56,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content, sho
     h2: ({ children }) => <h2 className="text-xl font-bold mt-5 mb-3 text-zinc-100 border-b border-zinc-800 pb-2">{children}</h2>,
     h3: ({ children }) => <h3 className="text-lg font-bold mt-4 mb-2 text-zinc-100">{children}</h3>,
     a: ({ href, children }) => (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">
         {children}
       </a>
     ),
     blockquote: ({ children }) => (
-      <blockquote className="border-l-4 border-zinc-600 pl-4 italic text-zinc-400 my-4">{children}</blockquote>
+      <blockquote className="border-l-4 border-indigo-600 pl-4 italic text-zinc-400 my-4 bg-zinc-900/50 p-2 rounded-r-lg">{children}</blockquote>
     ),
     code: ({ node, className, children, ...props }) => {
       const match = /language-(\w+)/.exec(className || '');
@@ -62,14 +69,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content, sho
 
       if (isInline) {
         return (
-          <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-sm font-mono text-zinc-200" {...props}>
+          <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-sm font-mono text-indigo-300" {...props}>
             {children}
           </code>
         );
       }
 
       return (
-        <div className="my-4 rounded-lg overflow-hidden border border-zinc-800 bg-[#0d0d0d]">
+        <div className="my-4 rounded-xl overflow-hidden border border-zinc-800 bg-[#0d0d0d]">
           <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900 border-b border-zinc-800">
             <span className="text-xs text-zinc-500 font-medium">{match![1]}</span>
           </div>
@@ -101,26 +108,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content, sho
   // Conditional content rendering based on streaming status
   const renderedContent = showCursor && !isUser
     ? (() => {
-        // --- LIVE MARKDOWN STREAMING LOGIC ---
+        // --- LIVE MARKDOWN STREAMING LOGIC (Unchanged) ---
         
         const contentToParse = content;
         let finalMarkdown = '';
         let streamingChunk = '';
 
-        // Safest Heuristic: Split content into a safe-to-parse part and a raw streaming part.
-        // We find the index of the last *complete* block break (\n\n).
         const lastBlockBreakIndex = contentToParse.lastIndexOf('\n\n');
 
         if (lastBlockBreakIndex !== -1) {
-            // Everything *before* the last block break is considered safe Markdown.
-            // We use lastBlockBreakIndex for the substring length.
             finalMarkdown = contentToParse.substring(0, lastBlockBreakIndex);
-            
-            // The rest, starting from the lastBlockBreakIndex, is the raw chunk.
             streamingChunk = contentToParse.substring(lastBlockBreakIndex);
-            
         } else {
-            // If no major break, the entire content is treated as a raw chunk.
             finalMarkdown = '';
             streamingChunk = contentToParse;
         }
@@ -132,11 +131,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content, sho
                     <div className="inline">
                       <ReactMarkdown
                         components={MarkdownComponents}
-                        // ADDED REMARK-MATH
                         remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
-                        // ADDED REHYPE-KATEX
                         rehypePlugins={[rehypeHighlight, rehypeKatex]}
-                        // Adding key helps ReactMarkdown re-parse correctly as finalMarkdown grows
                         key={finalMarkdown.length} 
                         skipHtml={false}
                       >
@@ -157,9 +153,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content, sho
         // Strategy 3: If complete or user message, use ReactMarkdown for full formatting
         <ReactMarkdown
           components={MarkdownComponents}
-          // ADDED REMARK-MATH
           remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
-          // ADDED REHYPE-KATEX
           rehypePlugins={[rehypeHighlight, rehypeKatex]}
           skipHtml={false}
         >
@@ -169,9 +163,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content, sho
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+      initial={{ opacity: 0, y: 15, scale: 0.98 }} // Bouncier initial state
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={spring} // Apply spring to message entry
       className={cn('w-full py-2', isUser ? 'flex justify-end' : 'flex justify-start')}
     >
       <div

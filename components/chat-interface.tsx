@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent } from 'react';
 import { MessageBubble } from './message-bubble';
-// Added Zap for the model selector and defined TypingCursor
 import { Send, Plus, ChevronDown, Terminal, Loader2, User, Settings, X, Check, Star, Trash2, MoreVertical, Zap } from 'lucide-react'; 
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -23,11 +22,18 @@ interface ModelData {
   id: string;
 }
 
+// Global Spring Configuration for Bouncy feel
+const spring = {
+  type: "spring",
+  stiffness: 400,
+  damping: 20,
+};
+
 // Blinking Cursor Component - UPDATED STYLING
 const TypingCursor = () => (
     <motion.span
         aria-hidden="true"
-        className="inline-block w-[10px] h-4 ml-0.5 bg-white align-middle translate-y-[0px]"
+        className="inline-block w-[10px] h-4 ml-0.5 bg-white align-middle translate-y-[0px]" // Changed color to white
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{
@@ -54,6 +60,7 @@ export default function ChatInterface() {
   const [isNewChat, setIsNewChat] = useState(true);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [isInputFocused, setIsInputFocused] = useState(false); // New state for input focus animation
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -236,6 +243,9 @@ export default function ChatInterface() {
     if (inputRef.current) {
       inputRef.current.style.resize = 'none';
       inputRef.current.style.overflow = 'hidden';
+      // Add focus/blur handlers to the inputRef for the new animation state
+      inputRef.current.onfocus = () => setIsInputFocused(true);
+      inputRef.current.onblur = () => setIsInputFocused(false);
     }
   }, []);
   
@@ -375,24 +385,42 @@ export default function ChatInterface() {
 
   const currentModelName = models.find((m) => m.id === selectedModelId)?.id || 'Select Model';
 
+  // Pulse animation for the input area's ambient glow
+  const inputGlowVariants = {
+    initial: { opacity: 0, scale: 0.98 },
+    focused: { 
+      opacity: 1, 
+      scale: 1.02,
+      transition: { 
+        duration: 0.8, 
+        repeat: Infinity, 
+        repeatType: "reverse", 
+        ease: "easeInOut" 
+      } 
+    },
+    hover: { opacity: 0.8, scale: 1.01, transition: { duration: 0.2 } },
+    unfocused: { opacity: 0, scale: 0.98, transition: { duration: 0.3 } },
+  };
+
   return (
     <div 
-      className="flex h-screen bg-[#09090b] text-zinc-100 font-sans overflow-hidden selection:bg-zinc-800 selection:text-white"
+      className="flex h-screen bg-[#06060a] text-zinc-100 font-sans overflow-hidden selection:bg-zinc-700 selection:text-white" // Darker BG
     >
-      {/* Sidebar - Use motion.div for fluid entrance */}
+      {/* Sidebar - Use motion.div with spring for a smooth, bouncy transition */}
       <motion.div
         initial={{ x: -260 }} // Start off-screen
         animate={{ x: 0 }}
-        transition={{ type: "tween", duration: 0.2 }}
+        transition={spring} // Bouncy spring transition
         className="w-[260px] bg-[#09090b] border-r border-zinc-800/50 flex flex-col flex-shrink-0 select-none"
         style={{ flexShrink: 0, position: 'relative' }}
       >
         <div className="p-3">
           <motion.button
-            whileHover={{ scale: 1.02 }}
+            whileHover={{ scale: 1.01, boxShadow: '0 4px 10px rgba(255, 255, 255, 0.1)' }} // White glow
             whileTap={{ scale: 0.98 }}
+            transition={spring}
             onClick={startNewChat}
-            className="flex items-center gap-2 w-full px-3 py-2 bg-zinc-100 text-zinc-900 hover:bg-zinc-200 rounded-lg text-sm font-semibold transition-colors shadow-md hover:shadow-lg"
+            className="flex items-center gap-2 w-full px-3 py-2 bg-zinc-100 text-zinc-900 hover:bg-white rounded-xl text-sm font-semibold transition-colors shadow-lg shadow-zinc-500/10" // White accent button
           >
             <Plus size={16} /> Start New Chat
           </motion.button>
@@ -406,19 +434,24 @@ export default function ChatInterface() {
             {chatList.map((chat) => (
               <motion.div
                 key={chat.id}
+                initial={{ opacity: 0, height: 0, y: -10 }}
+                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}
+                transition={{ ...spring, duration: 0.3, type: 'tween' }} // Use tween for exit/entry for cleaner stack updates
                 className={cn(
-                  'group relative rounded-lg text-sm transition-all flex items-center justify-between',
+                  'group relative rounded-xl text-sm transition-all flex items-center justify-between', // Rounded-xl for softer look
                   chat.id === chatId
-                    ? 'bg-zinc-800 text-zinc-100 font-medium shadow-inner border border-zinc-700/50'
+                    ? 'bg-zinc-800/50 text-zinc-100 font-medium border border-zinc-700' // Highlighted chat
                     : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
                 )}
               >
-                <button 
+                <motion.button 
+                    whileHover={{ x: 2 }}
                     onClick={() => loadChat(chat.id)} 
                     className="flex-1 text-left truncate px-3 py-2 cursor-pointer pr-10" // Padding for icons
                 >
                     {chat.title}
-                </button>
+                </motion.button>
 
                 <div 
                     className={cn(
@@ -432,10 +465,10 @@ export default function ChatInterface() {
                     {/* Dedicated Shift Quick-Delete Button (Trash Icon) */}
                     {isShiftPressed && chat.id !== chatId && (
                         <motion.button
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            exit={{ scale: 0 }}
-                            transition={{ duration: 0.15 }}
+                            initial={{ scale: 0.5, rotate: -45 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            exit={{ scale: 0.5, rotate: 45 }}
+                            transition={spring}
                             onClick={(e) => deleteChat(e, chat.id)}
                             className="p-1.5 rounded-full text-red-400 bg-zinc-700/80 hover:bg-zinc-600 transition-colors"
                             title="Quick Delete (Shift + Click)"
@@ -471,16 +504,18 @@ export default function ChatInterface() {
                             initial={{ opacity: 0, scale: 0.9, y: 5 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 5 }}
-                            transition={{ duration: 0.1 }}
+                            transition={{ duration: 0.15 }}
                             className="absolute right-2 top-full mt-1 w-32 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl text-left text-zinc-300 z-40"
                             style={{ transformOrigin: 'top right' }}
                         >
-                            <button
+                            <motion.button
+                                whileHover={{ backgroundColor: '#27272a' }}
+                                whileTap={{ scale: 0.95 }}
                                 onClick={(e) => {deleteChat(e, chat.id); setActiveMenuId(null);}}
                                 className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 rounded-md"
                             >
                                 <Trash2 size={14} /> Delete
-                            </button>
+                            </motion.button>
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -494,11 +529,12 @@ export default function ChatInterface() {
           <motion.button
             whileHover={{ backgroundColor: '#27272a', x: 2 }}
             whileTap={{ scale: 0.98 }}
+            transition={spring}
             onClick={() => setIsSettingsOpen(true)}
-            className="flex items-center gap-3 px-2 py-2 w-full rounded-lg hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-200 transition-all"
+            className="flex items-center gap-3 px-2 py-2 w-full rounded-xl hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-200 transition-all"
           >
-            <div className="w-6 h-6 rounded bg-zinc-700 flex items-center justify-center border border-zinc-600">
-              <User size={14} />
+            <div className="w-6 h-6 rounded-lg bg-zinc-700 flex items-center justify-center border border-zinc-600">
+              <User size={14} className="text-zinc-300" /> {/* User icon color update */}
             </div>
             <span className="text-sm font-medium">User</span>
             <Settings size={14} className="ml-auto" />
@@ -508,23 +544,28 @@ export default function ChatInterface() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col relative min-w-0">
-        <header className="sticky top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-20 bg-[#09090b]/80 backdrop-blur-md select-none border-b border-zinc-800/50">
+        <header className="sticky top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-20 bg-[#06060a]/90 backdrop-blur-md select-none border-b border-zinc-800/50">
           <div ref={modelDropdownRef} className="relative z-30">
             <motion.button
               whileTap={{ scale: 0.98 }}
               onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-200 shadow-lg",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 shadow-xl", // Rounded-full, larger shadow
                 isModelDropdownOpen 
-                  ? "bg-zinc-800 text-zinc-200 ring-2 ring-blue-500/50" 
-                  : "bg-zinc-900 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:border-zinc-700"
+                  ? "bg-zinc-700 text-white ring-2 ring-zinc-500/50" // White accent for open state
+                  : "bg-zinc-900 border border-zinc-700/50 text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600"
               )}
             >
-              <Zap size={14} className="text-blue-400" />
+              <Zap size={14} className="text-zinc-300" /> {/* Monochrome Zap icon */}
               <span className="truncate max-w-[150px]">
                 {currentModelName}
               </span>
-              <ChevronDown size={14} className={cn("transition-transform", isModelDropdownOpen ? "rotate-180" : "rotate-0")} />
+              <motion.div
+                animate={{ rotate: isModelDropdownOpen ? 180 : 0 }}
+                transition={spring}
+              >
+                <ChevronDown size={14} />
+              </motion.div>
             </motion.button>
             
             <AnimatePresence>
@@ -533,26 +574,30 @@ export default function ChatInterface() {
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
+                  transition={spring} // Bouncy dropdown
                   style={{ transformOrigin: 'top left' }}
                   className="absolute left-0 mt-2 w-72 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-1 max-h-80 overflow-y-auto"
                 >
                   {models.map((m) => (
-                    <div
+                    <motion.div
                       key={m.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.1, delay: models.indexOf(m) * 0.05 }}
                       className={cn(
                         'flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors group/model',
                         m.id === selectedModelId
-                          ? 'bg-zinc-800 text-zinc-100 font-medium'
+                          ? 'bg-zinc-800/50 text-zinc-100 font-medium' // Highlighted model
                           : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200'
                       )}
                     >
-                      <button
+                      <motion.button
+                          whileHover={{ x: 2 }}
                           onClick={() => handleModelSelect(m.id)}
                           className="flex-1 text-left truncate cursor-pointer"
                       >
                           {m.id}
-                      </button>
+                      </motion.button>
 
                       <div className="flex items-center gap-2">
                           <motion.button
@@ -570,15 +615,15 @@ export default function ChatInterface() {
 
                           {m.id === selectedModelId && (
                               <motion.div
-                                  initial={{ scale: 0.5, opacity: 0 }}
-                                  animate={{ scale: 1, opacity: 1 }}
-                                  transition={{ duration: 0.1 }}
+                                  initial={{ scale: 0.5, opacity: 0, rotate: -90 }}
+                                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                                  transition={spring}
                               >
-                                  <Check size={16} className="text-blue-400" />
+                                  <Check size={16} className="text-zinc-300" /> {/* Check icon color update */}
                               </motion.div>
                           )}
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </motion.div>
               )}
@@ -594,18 +639,23 @@ export default function ChatInterface() {
           <div className="max-w-4xl mx-auto px-4 py-1">
             {messages.length === 0 && (
               <motion.div 
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 50 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
+                transition={{ duration: 0.6, type: 'tween' }} // Smoother intro for the main message
                 className="flex flex-col items-center justify-center min-h-[40vh] text-center space-y-4 select-none"
               >
-                <div className="w-16 h-16 rounded-2xl bg-zinc-900 flex items-center justify-center mb-6 shadow-xl border border-zinc-800/70">
-                  <Terminal size={32} className="text-zinc-500" />
-                </div>
-                <h2 className="text-2xl font-semibold text-zinc-200 mb-2">
-                  How can I help you today?
+                <motion.div 
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1, rotate: 360 }}
+                    transition={{ ...spring, delay: 0.2 }}
+                    className="w-16 h-16 rounded-3xl bg-zinc-800/50 flex items-center justify-center mb-6 shadow-2xl border border-zinc-700/70" // Monochrome box
+                >
+                  <Terminal size={32} className="text-zinc-300" /> {/* Monochrome icon */}
+                </motion.div>
+                <h2 className="text-2xl font-extrabold text-zinc-100 mb-2 tracking-wide">
+                  Hello! How can I help you today?
                 </h2>
-                <p className="text-zinc-500">Using {currentModelName} for inference.</p>
+                <p className="text-zinc-500">{currentModelName}</p>
               </motion.div>
             )}
 
@@ -626,7 +676,14 @@ export default function ChatInterface() {
                 <div className="flex justify-start w-full py-2">
                     <div className="bg-zinc-900 text-zinc-100 px-5 py-3 rounded-[24px] rounded-tl-sm shadow-lg text-[16px]">
                         {/* Thinking indicator: ***Model is thinking...*** */}
-                        <span className='text-zinc-500'>***Model is thinking...***</span>
+                        <motion.span 
+                            className='text-zinc-500'
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: 1.05 }}
+                            transition={{ duration: 1, repeat: Infinity, repeatType: "reverse" }}
+                        >
+                            ***Model is thinking...***
+                        </motion.span>
                         <TypingCursor />
                     </div>
                 </div>
@@ -638,18 +695,25 @@ export default function ChatInterface() {
         </div>
 
         {/* Input Area */}
-        <div className="p-6 pt-2 bg-[#09090b] select-none border-t border-zinc-800/50">
+        <div className="p-6 pt-2 bg-[#06060a] select-none border-t border-zinc-800/50">
           <div className="max-w-4xl mx-auto relative group">
-            {/* Ambient Shadow/Glow effect */}
-            <div className="absolute inset-0 bg-zinc-800/10 rounded-[28px] blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            {/* Ambient Shadow/Glow effect with Pulse */}
+            <motion.div
+              className="absolute inset-0 bg-zinc-500/20 rounded-[28px] blur-xl" // White/zinc glow
+              variants={inputGlowVariants}
+              initial="unfocused"
+              animate={isLoading ? "focused" : isInputFocused ? "focused" : "unfocused"}
+            />
 
             <form
               onSubmit={onSubmit}
               className={cn(
-                "relative flex flex-col bg-zinc-900 border rounded-[26px] shadow-lg transition-all overflow-hidden",
+                "relative flex flex-col bg-zinc-900 border rounded-[28px] shadow-2xl transition-all overflow-hidden", // Increased shadow and border radius
                 isLoading 
-                    ? 'border-zinc-700/50 ring-1 ring-zinc-700/50 opacity-80' 
-                    : 'border-zinc-700/50 focus-within:border-zinc-600 focus-within:ring-1 focus-within:ring-zinc-700/50'
+                    ? 'border-zinc-500/50 ring-2 ring-zinc-500/50 opacity-90' // Monochrome loading ring
+                    : isInputFocused 
+                      ? 'border-zinc-500/50 ring-2 ring-zinc-500/50' // Monochrome focus ring
+                      : 'border-zinc-700/50'
               )}
             >
               <textarea
@@ -658,7 +722,7 @@ export default function ChatInterface() {
                 onChange={handleInputTextChange} // Using combined change/resize handler
                 onKeyDown={handleKeyDown}
                 onKeyUp={handleKeyUp}
-                placeholder={isLoading ? "Generating response..." : "Ask anything"}
+                placeholder={isLoading ? "Generating response..." : "How can I help you today?"}
                 rows={1}
                 className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base px-5 py-4 focus:outline-none resize-none [resize:none] max-h-[200px] min-h-[56px] overflow-hidden leading-relaxed max-w-full"
                 style={{ 
@@ -677,12 +741,17 @@ export default function ChatInterface() {
                   className={cn(
                     'p-2 rounded-full mb-0.5 transition-all duration-200',
                     input.trim()
-                      ? 'bg-zinc-100 text-zinc-900 hover:bg-white shadow-md hover:shadow-zinc-100/20'
+                      ? 'bg-zinc-100 text-zinc-900 hover:bg-white shadow-md shadow-zinc-500/30' // White send button
                       : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
                   )}
-                  whileTap={!isLoading && input.trim() ? { scale: 0.9 } : {}}
+                  whileTap={!isLoading && input.trim() ? { scale: 0.85, rotate: 10 } : {}} // Bouncy rotate on tap
+                  transition={spring}
                 >
-                  <Send size={16} strokeWidth={2.5} />
+                  {isLoading ? (
+                    <Loader2 size={16} className="animate-spin" strokeWidth={2.5} />
+                  ) : (
+                    <Send size={16} strokeWidth={2.5} />
+                  )}
                 </motion.button>
               </div>
             </form>
@@ -694,41 +763,54 @@ export default function ChatInterface() {
         </div>
       </div>
 
-      {/* Settings Modal (FIXED for build error, added AnimatePresence) */}
+      {/* Settings Modal (Animated) */}
       <AnimatePresence>
         {isSettingsOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-[2px]"
+            className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-sm"
             onClick={() => setIsSettingsOpen(false)}
             style={{ userSelect: 'none' }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-full max-w-md shadow-2xl select-none"
+              initial={{ opacity: 0, scale: 0.8, y: -50 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: -50 }}
+              transition={spring} // Bouncy modal entry
+              className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl w-full max-w-md shadow-2xl select-none" // Updated styling
               onClick={(e) => e.stopPropagation()}
-              transition={{ duration: 0.2 }}
             >
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-semibold text-zinc-100">Settings</h2>
-                <button className="text-zinc-500 hover:text-zinc-300" onClick={() => setIsSettingsOpen(false)}>
+                <h2 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
+                    <Settings size={20} className="text-zinc-300" /> {/* Monochrome icon */}
+                </h2>
+                <motion.button 
+                    className="text-zinc-500 hover:text-zinc-300 p-1 rounded-full hover:bg-zinc-800" 
+                    onClick={() => setIsSettingsOpen(false)}
+                    whileTap={{ scale: 0.9 }}
+                >
                   <X size={20} />
-                </button>
+                </motion.button>
               </div>
 
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="p-4 bg-red-900/20 border border-red-700/50 rounded-xl flex items-center justify-between"
+              >
                 <span className="text-sm text-red-400 font-medium">Clear all chat history from local storage.</span>
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={deleteAllChats}
-                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-md transition-colors"
+                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors shadow-lg shadow-red-600/30"
                 >
-                  Delete All
-                </button>
-              </div>
+                  <Trash2 size={14} className="inline-block mr-1"/> Delete All
+                </motion.button>
+              </motion.div>
             </motion.div>
           </motion.div>
         )}
