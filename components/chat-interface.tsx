@@ -23,7 +23,6 @@ import {
   Trash2,
   MoreVertical,
   Zap,
-  Code2,
 } from "lucide-react";
 import { motion, AnimatePresence, type Transition, type Variants } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -54,7 +53,7 @@ const spring: Transition = {
 };
 
 /**
- * Blinking cursor – same as in MessageBubble (kept for consistency).
+ * Blinking cursor for the "Thinking" text state.
  */
 const TypingCursor = () => (
   <motion.span
@@ -70,6 +69,36 @@ const TypingCursor = () => (
     }}
   />
 );
+
+/**
+ * New Bouncing Loader Component (3 dots).
+ */
+const BouncingLoader = () => {
+  const dotTransition = {
+    duration: 0.6,
+    repeat: Infinity,
+    ease: "easeInOut",
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 h-5 px-1">
+      {[0, 1, 2].map((i) => (
+        <motion.div
+          key={i}
+          className="w-2 h-2 bg-zinc-500 rounded-full"
+          animate={{
+            y: ["0%", "-50%", "0%"],
+            opacity: [0.4, 1, 0.4],
+          }}
+          transition={{
+            ...dotTransition,
+            delay: i * 0.15, // Stagger the bounce
+          }}
+        />
+      ))}
+    </div>
+  );
+};
 
 export default function ChatInterface() {
   /* ---------- State ---------- */
@@ -88,11 +117,9 @@ export default function ChatInterface() {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [lastAssistantMessage, setLastAssistantMessage] = useState("");
-  const [copiedSticky, setCopiedSticky] = useState(false);
   const [hasCodeBlock, setHasCodeBlock] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
   const [showCopyButton, setShowCopyButton] = useState(false);
-  
+
   // New State for Cursor Toggle (Default off)
   const [isCursorEnabled, setIsCursorEnabled] = useState(false);
 
@@ -378,9 +405,17 @@ export default function ChatInterface() {
     setMessages(newMessages);
     setIsLoading(true);
 
+    // NOTE: We do NOT add the AI placeholder immediately here.
+    // We wait until the first chunk arrives or the stream starts
+    // so that we can show the "Thinking" indicator (dots) in the meantime.
+
     const aiMsgId = `${Date.now() + 1}`;
-    const aiMsgPlaceholder: Message = { id: aiMsgId, role: "assistant", content: "" };
-    setMessages((prev) => [...prev, aiMsgPlaceholder]);
+    const aiMsgPlaceholder: Message = {
+      id: aiMsgId,
+      role: "assistant",
+      content: "",
+    };
+
     setIsNewChat(false);
 
     try {
@@ -388,7 +423,10 @@ export default function ChatInterface() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
+          messages: newMessages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
           model: selectedModelId,
         }),
       });
@@ -408,9 +446,19 @@ export default function ChatInterface() {
         const chunk = decoder.decode(value, { stream: true });
         rawAccumulated += chunk;
 
-        setMessages((prev) =>
-          prev.map((m) => (m.id === aiMsgId ? { ...m, content: rawAccumulated } : m))
-        );
+        setMessages((prev) => {
+          // If the AI message doesn't exist in state yet, add it now (first chunk).
+          if (!prev.some((m) => m.id === aiMsgId)) {
+            return [
+              ...prev,
+              { id: aiMsgId, role: "assistant", content: rawAccumulated },
+            ];
+          }
+          // Otherwise, update existing message.
+          return prev.map((m) =>
+            m.id === aiMsgId ? { ...m, content: rawAccumulated } : m
+          );
+        });
       }
 
       const finalMsg = { ...aiMsgPlaceholder, content: rawAccumulated };
@@ -420,7 +468,10 @@ export default function ChatInterface() {
       saveHistory(finalHistory, true);
     } catch (err) {
       console.error("Chat error:", err);
-      setMessages((prev) => prev.filter((m) => m.id !== aiMsgId && m.id !== userMsg.id));
+      // Cleanup: Remove failed message ID if it was added, or just the user message if we want strict rollback
+      setMessages((prev) =>
+        prev.filter((m) => m.id !== aiMsgId && m.id !== userMsg.id)
+      );
     } finally {
       setIsLoading(false);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -428,7 +479,8 @@ export default function ChatInterface() {
   };
 
   /* ---------- Misc ---------- */
-  const currentModelName = models.find((m) => m.id === selectedModelId)?.id || "Select Model";
+  const currentModelName =
+    models.find((m) => m.id === selectedModelId)?.id || "Select Model";
   const inputGlowVariants: Variants = {
     initial: { opacity: 0, scale: 0.98 },
     focused: {
@@ -473,8 +525,13 @@ export default function ChatInterface() {
         </div>
 
         {/* History list */}
-        <div ref={chatListRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800/80">
-          <div className="text-[11px] font-medium text-zinc-500 px-2 mb-2 uppercase tracking-wider">History</div>
+        <div
+          ref={chatListRef}
+          className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800/80"
+        >
+          <div className="text-[11px] font-medium text-zinc-500 px-2 mb-2 uppercase tracking-wider">
+            History
+          </div>
 
           <AnimatePresence initial={false}>
             {chatList.map((chat) => (
@@ -535,7 +592,9 @@ export default function ChatInterface() {
                   <motion.button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveMenuId(activeMenuId === chat.id ? null : chat.id);
+                      setActiveMenuId(
+                        activeMenuId === chat.id ? null : chat.id
+                      );
                     }}
                     className={cn(
                       "p-1.5 rounded-full transition-colors",
@@ -615,8 +674,13 @@ export default function ChatInterface() {
               )}
             >
               <Zap size={14} className="text-zinc-300" />
-              <span className="truncate max-w-[150px]">{currentModelName}</span>
-              <motion.div animate={{ rotate: isModelDropdownOpen ? 180 : 0 }} transition={spring}>
+              <span className="truncate max-w-[150px]">
+                {currentModelName}
+              </span>
+              <motion.div
+                animate={{ rotate: isModelDropdownOpen ? 180 : 0 }}
+                transition={spring}
+              >
                 <ChevronDown size={14} />
               </motion.div>
             </motion.button>
@@ -667,7 +731,12 @@ export default function ChatInterface() {
                           )}
                           whileTap={{ scale: 0.9 }}
                         >
-                          <Star size={14} fill={m.id === defaultModelId ? "currentColor" : "none"} />
+                          <Star
+                            size={14}
+                            fill={
+                              m.id === defaultModelId ? "currentColor" : "none"
+                            }
+                          />
                         </motion.button>
 
                         {m.id === selectedModelId && (
@@ -689,7 +758,9 @@ export default function ChatInterface() {
 
           {/* Current chat title */}
           <div className="text-sm text-zinc-500 hidden sm:block">
-            {isNewChat ? "New Chat" : chatList.find((c) => c.id === chatId)?.title || "..."}
+            {isNewChat
+              ? "New Chat"
+              : chatList.find((c) => c.id === chatId)?.title || "..."}
           </div>
         </header>
 
@@ -734,26 +805,34 @@ export default function ChatInterface() {
               ))}
             </AnimatePresence>
 
-            {/* Thinking indicator while waiting for first chunk */}
-            {isLoading && messages.length > 0 && messages[messages.length - 1]?.role === "user" && (
-              <div className="flex justify-start w-full py-2">
-                <div className="bg-zinc-900 text-zinc-100 px-5 py-3 rounded-[24px] rounded-tl-sm shadow-lg text-[16px]">
-                  <motion.span
-                    className="text-zinc-500"
-                    initial={{ scale: 0.95 }}
-                    animate={{ scale: 1.05 }}
-                    transition={{
-                      duration: 1,
-                      repeat: Infinity,
-                      repeatType: "reverse",
-                    }}
-                  >
-                    ***Model is thinking...***
-                  </motion.span>
-                  {isCursorEnabled && <TypingCursor />}
+            {/* Thinking indicator (Visible only when waiting for first chunk) */}
+            {isLoading &&
+              messages.length > 0 &&
+              messages[messages.length - 1]?.role === "user" && (
+                <div className="flex justify-start w-full py-2">
+                  {isCursorEnabled ? (
+                    <div className="bg-zinc-1000 text-zinc-100 px-5 py-3 rounded-[24px] rounded-tl-sm shadow-lg text-[16px]">
+                      <motion.span
+                        className="text-zinc-500"
+                        initial={{ scale: 0.95 }}
+                        animate={{ scale: 1.05 }}
+                        transition={{
+                          duration: 1,
+                          repeat: Infinity,
+                          repeatType: "reverse",
+                        }}
+                      >
+                      </motion.span>
+                      <TypingCursor />
+                    </div>
+                  ) : (
+                    /* Bouncing Dots Loader (when cursor is OFF) - No bubble container */
+                    <div className="px-4 py-2">
+                      <BouncingLoader />
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              )}
 
             <div ref={messagesEndRef} className="h-4" />
           </div>
@@ -771,8 +850,8 @@ export default function ChatInterface() {
                 isLoading
                   ? "focused"
                   : isInputFocused
-                    ? "focused"
-                    : "unfocused"
+                  ? "focused"
+                  : "unfocused"
               }
             />
 
@@ -783,8 +862,8 @@ export default function ChatInterface() {
                 isLoading
                   ? "border-zinc-500/50 ring-2 ring-zinc-500/50 opacity-90"
                   : isInputFocused
-                    ? "border-zinc-500/50 ring-2 ring-zinc-500/50"
-                    : "border-zinc-700/50"
+                  ? "border-zinc-500/50 ring-2 ring-zinc-500/50"
+                  : "border-zinc-700/50"
               )}
             >
               <textarea
@@ -794,7 +873,9 @@ export default function ChatInterface() {
                 onKeyDown={handleKeyDown}
                 onKeyUp={handleKeyUp}
                 placeholder={
-                  isLoading ? "Generating response..." : "How can I help you today?"
+                  isLoading
+                    ? "Generating response..."
+                    : "How can I help you today?"
                 }
                 rows={1}
                 wrap="off"
@@ -819,11 +900,19 @@ export default function ChatInterface() {
                       ? "bg-zinc-100 text-zinc-900 hover:bg-white shadow-md shadow-zinc-500/30"
                       : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
                   )}
-                  whileTap={!isLoading && input.trim() ? { scale: 0.85, rotate: 10 } : {}}
+                  whileTap={
+                    !isLoading && input.trim()
+                      ? { scale: 0.85, rotate: 10 }
+                      : {}
+                  }
                   transition={spring}
                 >
                   {isLoading ? (
-                    <Loader2 size={16} className="animate-spin" strokeWidth={2.5} />
+                    <Loader2
+                      size={16}
+                      className="animate-spin"
+                      strokeWidth={2.5}
+                    />
                   ) : (
                     <Send size={16} strokeWidth={2.5} />
                   )}
@@ -873,10 +962,10 @@ export default function ChatInterface() {
               </div>
 
               <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.05 }}
-                  className="flex items-center justify-between p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-xl mb-4"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 }}
+                className="flex items-center justify-between p-4 bg-zinc-800/30 border border-zinc-700/50 rounded-xl mb-4"
               >
                 <div className="flex flex-col">
                   <span className="text-sm text-zinc-300 font-medium">
@@ -896,7 +985,10 @@ export default function ChatInterface() {
                   whileTap={{ scale: 0.9 }}
                 >
                   <motion.div
-                    className={cn("w-4 h-4 rounded-full shadow-sm", isCursorEnabled ? "bg-zinc-900" : "bg-zinc-400")}
+                    className={cn(
+                      "w-4 h-4 rounded-full shadow-sm",
+                      isCursorEnabled ? "bg-zinc-900" : "bg-zinc-400"
+                    )}
                     animate={{ x: isCursorEnabled ? 20 : 0 }}
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
                   />
