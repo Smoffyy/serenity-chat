@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent } from 'react';
 import { MessageBubble } from './message-bubble';
-import { Send, Plus, ChevronDown, Terminal, Loader2, User, Settings, X } from 'lucide-react';
+import { Send, Plus, ChevronDown, Terminal, Loader2, User, Settings, X, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -31,17 +31,19 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [chatList, setChatList] = useState<ChatMetadata[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isNewChat, setIsNewChat] = useState(true); // Added: Tracks if the current chat has ever been saved
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false); // NEW: State for dropdown
+  const [isNewChat, setIsNewChat] = useState(true); // FIX: Tracks if the current chat has ever been saved
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const modelDropdownRef = useRef<HTMLDivElement>(null); // NEW: Ref for dropdown
 
   // --- Utility Functions ---
 
   const getChatMetadata = useCallback((): ChatMetadata[] => {
     try {
-      // Sort by date descending
       const list = JSON.parse(localStorage.getItem('all_chats') || '[]') as ChatMetadata[];
+      // Sort by date descending
       return list.sort((a, b) => b.date - a.date);
     } catch {
       return [];
@@ -49,7 +51,7 @@ export default function ChatInterface() {
   }, []);
 
   const saveHistory = useCallback(
-    (currentMessages: Message[], shouldUpdateDate: boolean = false) => {
+    (currentMessages: Message[], shouldUpdateDate: boolean = false) => { // FIX: Added shouldUpdateDate
       localStorage.setItem(`chat_${chatId}`, JSON.stringify(currentMessages));
 
       const currentList = getChatMetadata();
@@ -63,7 +65,6 @@ export default function ChatInterface() {
         // FIX: Only update the date if shouldUpdateDate is true (i.e., new message sent)
         date = shouldUpdateDate ? Date.now() : currentList[existingIndex].date;
       } else if (currentMessages.length > 0) {
-        // Only set title for the first message
         const firstUserMsg = currentMessages.find((m) => m.role === 'user');
         if (firstUserMsg) {
           const txt = firstUserMsg.content.trim();
@@ -74,16 +75,12 @@ export default function ChatInterface() {
       const newMeta: ChatMetadata = { id: chatId, title, date };
 
       if (existingIndex > -1) {
-        // Update existing entry
         currentList[existingIndex] = newMeta;
       } else {
-        // Add new entry
         currentList.unshift(newMeta);
       }
       
-      // Re-sort the list if the date was updated or it's a new chat
       const sortedList = currentList.sort((a, b) => b.date - a.date);
-
       localStorage.setItem('all_chats', JSON.stringify(sortedList));
       setChatList(sortedList);
     },
@@ -92,7 +89,7 @@ export default function ChatInterface() {
 
   const loadChat = useCallback(
     (id: string) => {
-      // FIX: Save the current chat's state if it has content, but DO NOT update the date.
+      // FIX: Save the current chat, but only update the date if a new message was sent
       if (messages.length > 0 && chatId !== id && !isNewChat) {
           saveHistory(messages, false); 
       }
@@ -105,13 +102,13 @@ export default function ChatInterface() {
       if (saved) {
         try {
           setMessages(JSON.parse(saved));
-          setIsNewChat(false);
+          setIsNewChat(false); // Mark as existing chat
         } catch (e) {
           console.error(e);
           setIsNewChat(true); 
         }
       } else {
-          setIsNewChat(true);
+          setIsNewChat(true); // Mark as new chat if nothing loaded
       }
 
       setTimeout(() => inputRef.current?.focus(), 0);
@@ -120,13 +117,13 @@ export default function ChatInterface() {
   );
 
   const startNewChat = () => {
-    // Save the current chat's state if it has content, but DO NOT update the date.
+    // FIX: Save the current chat's state if it has content, but DO NOT update the date.
     if (messages.length > 0 && !isNewChat) saveHistory(messages, false);
 
     setChatId(Date.now().toString());
     setMessages([]);
     setInput('');
-    setIsNewChat(true); // Indicate this is a new, unsaved chat
+    setIsNewChat(true); // Mark as new chat
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
@@ -137,8 +134,13 @@ export default function ChatInterface() {
     startNewChat();
     setIsSettingsOpen(false);
   };
-  
-  // --- Event Handlers ---
+
+  const handleModelSelect = (modelId: string) => {
+    setSelectedModelId(modelId);
+    setTimeout(() => {
+        setIsModelDropdownOpen(false);
+    }, 150);
+  };
 
   const handleInputResize = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget as HTMLTextAreaElement;
@@ -158,6 +160,27 @@ export default function ChatInterface() {
   // --- Effects ---
 
   useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.resize = 'none';
+      inputRef.current.style.overflow = 'hidden';
+    }
+  }, []);
+  
+  // NEW: Click outside handler for model dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
+        setIsModelDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
     setChatList(getChatMetadata());
 
     fetch('/api/models')
@@ -168,8 +191,6 @@ export default function ChatInterface() {
           if (!selectedModelId) setSelectedModelId(data.data[0].id);
         }
       });
-      
-    setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
   // SCROLLING FIX: Conditional smooth/instant scroll
@@ -182,7 +203,7 @@ export default function ChatInterface() {
 
     messagesEndRef.current.scrollIntoView({ behavior: scrollBehavior });
     
-  }, [messages, isLoading]); // Dependency on messages array and loading state for continuous update
+  }, [messages, isLoading]);
 
   // --- Submission Logic ---
 
@@ -245,10 +266,10 @@ export default function ChatInterface() {
       }
 
       const finalMsg = { ...aiMsg, content: rawAccumulated };
-      const finalHistory = [...newMessages.filter(m => m.id !== userMsg.id), userMsg, finalMsg];
+      const finalHistory = [...newMessages.filter(m => m.id !== userMsg.id), userMsg, finalMsg]; // Re-arrange in case of race condition
 
       setMessages(finalHistory);
-      saveHistory(finalHistory, true); // Update date because a new message was sent
+      saveHistory(finalHistory, true); // FIX: Update date because a new message was sent
     } catch (err) {
       console.error(err);
       setMessages((prev) => prev.filter((m) => m.id !== aiMsgId && m.id !== userMsg.id));
@@ -328,23 +349,60 @@ export default function ChatInterface() {
       </motion.div>
 
       <div className="flex-1 flex flex-col relative min-w-0">
-        <header className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-10 bg-[#09090b]/80 backdrop-blur-sm">
-          <div className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors">
-            <span className="text-sm font-medium select-none">
-              {models.find((m) => m.id === selectedModelId)?.id || 'Select Model'}
-            </span>
-            <ChevronDown size={14} />
-            <select
-              value={selectedModelId}
-              onChange={(e) => setSelectedModelId(e.target.value)}
-              className="absolute opacity-0 inset-0 cursor-pointer"
+        <header className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-20 bg-[#09090b]/80 backdrop-blur-sm">
+          {/* NEW: Custom Animated Model Dropdown */}
+          <div ref={modelDropdownRef} className="relative z-30">
+            <button
+              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200",
+                isModelDropdownOpen 
+                  ? "bg-zinc-800 text-zinc-200" 
+                  : "bg-zinc-900 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-800 hover:border-zinc-700"
+              )}
             >
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.id}
-                </option>
-              ))}
-            </select>
+              <span className="truncate max-w-[150px]">
+                {models.find((m) => m.id === selectedModelId)?.id || 'Select Model'}
+              </span>
+              <ChevronDown size={14} className={cn("transition-transform", isModelDropdownOpen ? "rotate-180" : "rotate-0")} />
+            </button>
+            
+            <AnimatePresence>
+              {isModelDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scaleY: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scaleY: 1 }}
+                  exit={{ opacity: 0, y: 10, scaleY: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  style={{ transformOrigin: 'top' }}
+                  className="absolute left-0 mt-2 w-72 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-1 max-h-80 overflow-y-auto"
+                >
+                  {models.map((m) => (
+                    <div
+                      key={m.id}
+                      onClick={() => handleModelSelect(m.id)}
+                      className={cn(
+                        'flex items-center justify-between px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors',
+                        m.id === selectedModelId
+                          ? 'bg-zinc-800 text-zinc-100 font-medium'
+                          : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200'
+                      )}
+                    >
+                      <span className="truncate">{m.id}</span>
+                      {m.id === selectedModelId && (
+                        <motion.div
+                            initial={{ scale: 0.5, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ duration: 0.1 }}
+                        >
+                            <Check size={16} className="text-blue-400" />
+                        </motion.div>
+                      )}
+                    </div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </header>
 
@@ -384,6 +442,7 @@ export default function ChatInterface() {
             <form
               onSubmit={onSubmit}
               className="relative flex flex-col bg-zinc-900 border border-zinc-700/50 rounded-[26px] shadow-lg focus-within:border-zinc-600 focus-within:ring-1 focus-within:ring-zinc-700/50 transition-all overflow-hidden"
+              style={{ resize: 'none' }}
             >
               <textarea
                 ref={inputRef}
@@ -392,7 +451,7 @@ export default function ChatInterface() {
                 onKeyDown={handleKeyDown}
                 placeholder="Ask anything..."
                 rows={1}
-                className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base px-5 py-4 focus:outline-none resize-none select-none max-h-[200px] min-h-[56px] overflow-hidden leading-relaxed max-w-full"
+                className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base px-5 py-4 focus:outline-none resize-none select-none [resize:none] max-h-[200px] min-h-[56px] overflow-hidden leading-relaxed max-w-full"
                 style={{ 
                   height: '56px', 
                   resize: 'none',
@@ -433,25 +492,27 @@ export default function ChatInterface() {
         <div
           className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-[2px]"
           onClick={() => setIsSettingsOpen(false)}
+          style={{ userSelect: 'none' }}
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-full max-w-md shadow-2xl"
+            className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl w-full max-w-md shadow-2xl select-none"
             onClick={(e) => e.stopPropagation()}
+            style={{ userSelect: 'none' }}
           >
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-zinc-100">Settings</h2>
+            <div className="flex justify-between items-center mb-6 select-none">
+              <h2 className="text-lg font-semibold text-zinc-100 select-none">Settings</h2>
               <button className="text-zinc-500 hover:text-zinc-300" onClick={() => setIsSettingsOpen(false)}>
                 <X size={20} />
               </button>
             </div>
 
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between">
-              <span className="text-sm text-red-400 font-medium">Clear all chats</span>
+              <span className="text-sm text-red-400 font-medium select-none">Clear all chats</span>
               <button
                 onClick={deleteAllChats}
-                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-md transition-colors"
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-md transition-colors select-none"
               >
                 Delete
               </button>
