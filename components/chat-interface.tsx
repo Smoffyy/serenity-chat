@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, FormEvent, useCallback, KeyboardEvent } from 'react';
 import { MessageBubble } from './message-bubble';
-import { Send, Plus, ChevronDown, Terminal, Loader2, User, Settings, X, Check } from 'lucide-react';
+import { Send, Plus, ChevronDown, Terminal, Loader2, User, Settings, X, Check, Star, Trash2, MoreVertical } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -25,25 +25,24 @@ interface ModelData {
 export default function ChatInterface() {
   const [models, setModels] = useState<ModelData[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [defaultModelId, setDefaultModelId] = useState<string>(''); // NEW: State for default model
   const [chatId, setChatId] = useState<string>(() => Date.now().toString());
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [chatList, setChatList] = useState<ChatMetadata[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false); // NEW: State for dropdown
-  const [isNewChat, setIsNewChat] = useState(true); // FIX: Tracks if the current chat has ever been saved
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [isNewChat, setIsNewChat] = useState(true);
+  const [isShiftPressed, setIsShiftPressed] = useState(false); // NEW: State for Shift key
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const modelDropdownRef = useRef<HTMLDivElement>(null); // NEW: Ref for dropdown
-
-  // --- Utility Functions ---
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
 
   const getChatMetadata = useCallback((): ChatMetadata[] => {
     try {
       const list = JSON.parse(localStorage.getItem('all_chats') || '[]') as ChatMetadata[];
-      // Sort by date descending
       return list.sort((a, b) => b.date - a.date);
     } catch {
       return [];
@@ -51,7 +50,7 @@ export default function ChatInterface() {
   }, []);
 
   const saveHistory = useCallback(
-    (currentMessages: Message[], shouldUpdateDate: boolean = false) => { // FIX: Added shouldUpdateDate
+    (currentMessages: Message[], shouldUpdateDate: boolean = false) => {
       localStorage.setItem(`chat_${chatId}`, JSON.stringify(currentMessages));
 
       const currentList = getChatMetadata();
@@ -62,7 +61,6 @@ export default function ChatInterface() {
 
       if (existingIndex > -1) {
         title = currentList[existingIndex].title;
-        // FIX: Only update the date if shouldUpdateDate is true (i.e., new message sent)
         date = shouldUpdateDate ? Date.now() : currentList[existingIndex].date;
       } else if (currentMessages.length > 0) {
         const firstUserMsg = currentMessages.find((m) => m.role === 'user');
@@ -89,7 +87,6 @@ export default function ChatInterface() {
 
   const loadChat = useCallback(
     (id: string) => {
-      // FIX: Save the current chat, but only update the date if a new message was sent
       if (messages.length > 0 && chatId !== id && !isNewChat) {
           saveHistory(messages, false); 
       }
@@ -102,13 +99,13 @@ export default function ChatInterface() {
       if (saved) {
         try {
           setMessages(JSON.parse(saved));
-          setIsNewChat(false); // Mark as existing chat
+          setIsNewChat(false);
         } catch (e) {
           console.error(e);
           setIsNewChat(true); 
         }
       } else {
-          setIsNewChat(true); // Mark as new chat if nothing loaded
+          setIsNewChat(true);
       }
 
       setTimeout(() => inputRef.current?.focus(), 0);
@@ -117,13 +114,13 @@ export default function ChatInterface() {
   );
 
   const startNewChat = () => {
-    // FIX: Save the current chat's state if it has content, but DO NOT update the date.
     if (messages.length > 0 && !isNewChat) saveHistory(messages, false);
 
     setChatId(Date.now().toString());
     setMessages([]);
     setInput('');
-    setIsNewChat(true); // Mark as new chat
+    setIsNewChat(true);
+    if (defaultModelId) setSelectedModelId(defaultModelId); // NEW: Set default model on new chat
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
@@ -133,6 +130,28 @@ export default function ChatInterface() {
     setChatList([]);
     startNewChat();
     setIsSettingsOpen(false);
+  };
+  
+  // NEW: Delete individual chat handler
+  const deleteChat = (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      localStorage.removeItem(`chat_${id}`);
+      
+      const updatedList = chatList.filter(c => c.id !== id);
+      localStorage.setItem('all_chats', JSON.stringify(updatedList));
+      setChatList(updatedList);
+      
+      if (chatId === id) {
+          startNewChat();
+      }
+  };
+  
+  // NEW: Set Default Model
+  const handleSetDefaultModel = (e: React.MouseEvent, modelId: string) => {
+    e.stopPropagation();
+    const newDefault = defaultModelId === modelId ? '' : modelId;
+    setDefaultModelId(newDefault);
+    localStorage.setItem('default_model', newDefault);
   };
 
   const handleModelSelect = (modelId: string) => {
@@ -155,6 +174,15 @@ export default function ChatInterface() {
       e.preventDefault();
       onSubmit(e as unknown as FormEvent);
     }
+    if (e.key === 'Shift') { // NEW: Shift detection
+        setIsShiftPressed(true);
+    }
+  };
+  
+  const handleKeyUp = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Shift') { // NEW: Shift detection
+        setIsShiftPressed(false);
+    }
   };
 
   // --- Effects ---
@@ -166,7 +194,6 @@ export default function ChatInterface() {
     }
   }, []);
   
-  // NEW: Click outside handler for model dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
@@ -182,13 +209,22 @@ export default function ChatInterface() {
 
   useEffect(() => {
     setChatList(getChatMetadata());
+    
+    // NEW: Load default model
+    const savedDefaultModel = localStorage.getItem('default_model') || '';
+    setDefaultModelId(savedDefaultModel);
 
     fetch('/api/models')
       .then((res) => res.json())
       .then((data) => {
         if (data.data?.length) {
           setModels(data.data);
-          if (!selectedModelId) setSelectedModelId(data.data[0].id);
+          
+          let initialModel = data.data[0].id;
+          if (savedDefaultModel && data.data.some((m: ModelData) => m.id === savedDefaultModel)) {
+            initialModel = savedDefaultModel;
+          }
+          if (!selectedModelId) setSelectedModelId(initialModel);
         }
       });
   }, []);
@@ -197,8 +233,6 @@ export default function ChatInterface() {
   useEffect(() => {
     if (!messagesEndRef.current) return;
     
-    // If loading/streaming, use 'instant' scroll to prevent stuttering.
-    // Otherwise, use 'smooth' scroll for a pleasant effect.
     const scrollBehavior = isLoading ? 'instant' : 'smooth';
 
     messagesEndRef.current.scrollIntoView({ behavior: scrollBehavior });
@@ -233,7 +267,7 @@ export default function ChatInterface() {
     const aiMsg: Message = { id: aiMsgId, role: 'assistant', content: '' };
 
     setMessages((prev) => [...prev, aiMsg]);
-    setIsNewChat(false); // Mark as saved/active
+    setIsNewChat(false);
 
     try {
       const response = await fetch('/api/chat', {
@@ -266,10 +300,10 @@ export default function ChatInterface() {
       }
 
       const finalMsg = { ...aiMsg, content: rawAccumulated };
-      const finalHistory = [...newMessages.filter(m => m.id !== userMsg.id), userMsg, finalMsg]; // Re-arrange in case of race condition
+      const finalHistory = [...newMessages.filter(m => m.id !== userMsg.id), userMsg, finalMsg];
 
       setMessages(finalHistory);
-      saveHistory(finalHistory, true); // FIX: Update date because a new message was sent
+      saveHistory(finalHistory, true);
     } catch (err) {
       console.error(err);
       setMessages((prev) => prev.filter((m) => m.id !== aiMsgId && m.id !== userMsg.id));
@@ -319,16 +353,59 @@ export default function ChatInterface() {
           {chatList.map((chat) => (
             <div
               key={chat.id}
-              onClick={() => loadChat(chat.id)}
               className={cn(
-                'px-3 py-2 rounded-lg text-sm truncate cursor-pointer transition-all select-none',
+                'group relative px-3 py-2 rounded-lg text-sm truncate cursor-pointer transition-all flex items-center justify-between select-none',
                 chat.id === chatId
                   ? 'bg-zinc-800 text-zinc-100'
                   : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
               )}
               draggable={false}
+              onClick={() => loadChat(chat.id)}
             >
-              {chat.title}
+              <span className="truncate pr-8">{chat.title}</span>
+
+              {/* NEW: Delete Button Container */}
+              <div 
+                  className={cn(
+                      "absolute right-2 top-1/2 -translate-y-1/2 transition-opacity duration-150 flex items-center",
+                      isShiftPressed || chat.id === chatId 
+                          ? 'opacity-100' 
+                          : 'opacity-0 group-hover:opacity-100'
+                  )}
+                  onClick={(e) => e.stopPropagation()}
+              >
+                  {/* Quick Delete Button (Appears on Shift or Hover) */}
+                  {isShiftPressed && chat.id !== chatId && (
+                      <button
+                          onClick={(e) => deleteChat(e, chat.id)}
+                          className="p-1.5 rounded-full text-zinc-500 hover:text-red-400 hover:bg-zinc-700/50 transition-colors"
+                      >
+                          <Trash2 size={14} />
+                      </button>
+                  )}
+
+                  {/* Context Menu Button (Appears on Hover/Active Chat) */}
+                  <div className="relative group/menu">
+                      <button
+                          className="p-1.5 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                      >
+                          <MoreVertical size={14} />
+                      </button>
+                      
+                      {/* Dropdown Menu - Always Hidden, Opens via Custom Logic (Simplified for CSS-only display here) */}
+                      {/* For simplicity and speed, we will use a basic hidden element activated by click outside of the component logic */}
+                      {/* For full functionality, this would need an active state and component to handle mouse position/clicks */}
+                      <div className="absolute right-0 top-full mt-1 w-32 hidden group-hover/menu:block bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl text-left text-zinc-300 z-40">
+                          <button
+                              onClick={(e) => deleteChat(e, chat.id)}
+                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 rounded-md"
+                          >
+                              <Trash2 size={14} /> Delete
+                          </button>
+                      </div>
+                  </div>
+              </div>
             </div>
           ))}
         </div>
@@ -350,7 +427,7 @@ export default function ChatInterface() {
 
       <div className="flex-1 flex flex-col relative min-w-0">
         <header className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-20 bg-[#09090b]/80 backdrop-blur-sm">
-          {/* NEW: Custom Animated Model Dropdown */}
+          {/* Custom Animated Model Dropdown */}
           <div ref={modelDropdownRef} className="relative z-30">
             <button
               onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
@@ -380,24 +457,44 @@ export default function ChatInterface() {
                   {models.map((m) => (
                     <div
                       key={m.id}
-                      onClick={() => handleModelSelect(m.id)}
                       className={cn(
-                        'flex items-center justify-between px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors',
+                        'flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors group/model',
                         m.id === selectedModelId
                           ? 'bg-zinc-800 text-zinc-100 font-medium'
                           : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200'
                       )}
                     >
-                      <span className="truncate">{m.id}</span>
-                      {m.id === selectedModelId && (
-                        <motion.div
-                            initial={{ scale: 0.5, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ duration: 0.1 }}
-                        >
-                            <Check size={16} className="text-blue-400" />
-                        </motion.div>
-                      )}
+                      <button
+                          onClick={() => handleModelSelect(m.id)}
+                          className="flex-1 text-left truncate cursor-pointer"
+                      >
+                          {m.id}
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                          {/* NEW: Default Model Star */}
+                          <button
+                              onClick={(e) => handleSetDefaultModel(e, m.id)}
+                              className={cn(
+                                  'p-1 rounded-full transition-colors',
+                                  m.id === defaultModelId
+                                      ? 'text-yellow-400 hover:text-yellow-300'
+                                      : 'text-zinc-600 hover:text-zinc-400 opacity-0 group-hover/model:opacity-100'
+                              )}
+                          >
+                              <Star size={14} fill={m.id === defaultModelId ? 'currentColor' : 'none'} />
+                          </button>
+
+                          {m.id === selectedModelId && (
+                              <motion.div
+                                  initial={{ scale: 0.5, opacity: 0 }}
+                                  animate={{ scale: 1, opacity: 1 }}
+                                  transition={{ duration: 0.1 }}
+                              >
+                                  <Check size={16} className="text-blue-400" />
+                              </motion.div>
+                          )}
+                      </div>
                     </div>
                   ))}
                 </motion.div>
@@ -449,6 +546,7 @@ export default function ChatInterface() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onKeyUp={handleKeyUp} 
                 placeholder="Ask anything..."
                 rows={1}
                 className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base px-5 py-4 focus:outline-none resize-none select-none [resize:none] max-h-[200px] min-h-[56px] overflow-hidden leading-relaxed max-w-full"
