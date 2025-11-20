@@ -23,6 +23,7 @@ import {
   Trash2,
   MoreVertical,
   Zap,
+  Code2,
 } from "lucide-react";
 import { motion, AnimatePresence, type Transition, type Variants } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -86,6 +87,11 @@ export default function ChatInterface() {
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [lastAssistantMessage, setLastAssistantMessage] = useState("");
+  const [copiedSticky, setCopiedSticky] = useState(false);
+  const [hasCodeBlock, setHasCodeBlock] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [showCopyButton, setShowCopyButton] = useState(false);
 
   /* ---------- Refs ---------- */
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -176,6 +182,9 @@ export default function ChatInterface() {
     setMessages([]);
     setInput("");
     setIsNewChat(true);
+    setLastAssistantMessage("");
+    setShowCopyButton(false);
+    setHasCodeBlock(false);
     if (defaultModelId) setSelectedModelId(defaultModelId);
     setTimeout(() => inputRef.current?.focus(), 50);
   };
@@ -312,6 +321,23 @@ export default function ChatInterface() {
 
     const scrollBehavior = isLoading ? "instant" : "smooth";
     messagesEndRef.current.scrollIntoView({ behavior: scrollBehavior });
+
+    // Update last assistant message for sticky copy button
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.role === "assistant" && lastMsg.content.length > 0) {
+      setLastAssistantMessage(lastMsg.content);
+      // Check if message contains code blocks
+      const hasCode = /```[\s\S]*?```/.test(lastMsg.content);
+      setHasCodeBlock(hasCode);
+      // Only show copy button when not loading (AI is finished) AND message has substantial content
+      setShowCopyButton(!isLoading && lastMsg.content.length > 10);
+    } else {
+      setShowCopyButton(false);
+      if (!lastMsg || lastMsg.role !== "assistant") {
+        setLastAssistantMessage("");
+        setHasCodeBlock(false);
+      }
+    }
   }, [messages, isLoading]);
 
   /* ---------- Submission logic ---------- */
@@ -385,8 +411,6 @@ export default function ChatInterface() {
 
   /* ---------- Misc ---------- */
   const currentModelName = models.find((m) => m.id === selectedModelId)?.id || "Select Model";
-
-  /* ---------- Input glow variants ---------- */
   const inputGlowVariants: Variants = {
     initial: { opacity: 0, scale: 0.98 },
     focused: {

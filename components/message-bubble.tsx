@@ -1,12 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import remarkBreaks from "remark-breaks";
 import { cn } from "@/lib/utils";
 import { motion, type Transition } from "framer-motion";
+import { Copy, Check } from "lucide-react";
 
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -41,7 +42,7 @@ const TypingCursor = () => (
     transition={{
       duration: 0.5,
       repeat: Infinity,
-      repeatType: "reverse" as const, // ← cast to the allowed enum
+      repeatType: "reverse" as const,
       ease: "easeInOut",
     }}
   />
@@ -53,6 +54,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   showCursor = false,
 }) => {
   const isUser = role === "user";
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   /* ---------- Markdown rendering helpers ---------- */
   const MarkdownComponents: Record<string, React.FC<any>> = {
@@ -189,7 +197,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         );
       })()
     : (
-        // Non‑streaming – normal Markdown
+        // Non–streaming – normal Markdown
         <ReactMarkdown
           components={MarkdownComponents}
           remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
@@ -208,20 +216,43 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       transition={spring}
       className={cn(
         "w-full py-2",
-        isUser ? "flex justify-end" : "flex justify-start"
+        isUser ? "flex justify-end" : "flex flex-col justify-start"
       )}
     >
       <div
         className={cn(
           isUser
-            ? "w-fit max-w-[85%] sm:max-w-[70%] bg-[#2f2f2f] text-zinc-100 px-5 py-3 rounded-[26px] rounded-tr-sm shadow-lg"
+            ? "bg-[#2f2f2f] text-zinc-100 px-5 py-3 rounded-[26px] rounded-tr-sm shadow-lg break-words overflow-x-auto"
             : "w-full max-w-full"
         )}
+        style={isUser ? { maxWidth: "85%", wordBreak: "break-word", overflowWrap: "break-word" } : {}}
       >
         <div className={cn("prose prose-invert max-w-none", isUser ? "text-[15px]" : "text-[16px]")}>
           {renderedContent}
         </div>
       </div>
+      {!isUser && (
+        <motion.button
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handleCopy}
+          className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors text-sm w-fit"
+          title="Copy message"
+        >
+          {copied ? (
+            <>
+              <Check size={16} className="text-green-400" />
+              <span className="text-green-400">Copied!</span>
+            </>
+          ) : (
+            <>
+              <Copy size={16} />
+            </>
+          )}
+        </motion.button>
+      )}
     </motion.div>
   );
 };
