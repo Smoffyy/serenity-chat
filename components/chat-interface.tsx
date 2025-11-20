@@ -25,7 +25,7 @@ interface ModelData {
 export default function ChatInterface() {
   const [models, setModels] = useState<ModelData[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
-  const [defaultModelId, setDefaultModelId] = useState<string>(''); // NEW: State for default model
+  const [defaultModelId, setDefaultModelId] = useState<string>('');
   const [chatId, setChatId] = useState<string>(() => Date.now().toString());
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -34,11 +34,13 @@ export default function ChatInterface() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isNewChat, setIsNewChat] = useState(true);
-  const [isShiftPressed, setIsShiftPressed] = useState(false); // NEW: State for Shift key
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const chatListRef = useRef<HTMLDivElement>(null);
 
   const getChatMetadata = useCallback((): ChatMetadata[] => {
     try {
@@ -90,7 +92,7 @@ export default function ChatInterface() {
       if (messages.length > 0 && chatId !== id && !isNewChat) {
           saveHistory(messages, false); 
       }
-
+      setActiveMenuId(null);
       setChatId(id);
       setMessages([]);
       setInput('');
@@ -116,11 +118,12 @@ export default function ChatInterface() {
   const startNewChat = () => {
     if (messages.length > 0 && !isNewChat) saveHistory(messages, false);
 
+    setActiveMenuId(null);
     setChatId(Date.now().toString());
     setMessages([]);
     setInput('');
     setIsNewChat(true);
-    if (defaultModelId) setSelectedModelId(defaultModelId); // NEW: Set default model on new chat
+    if (defaultModelId) setSelectedModelId(defaultModelId);
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
@@ -132,7 +135,6 @@ export default function ChatInterface() {
     setIsSettingsOpen(false);
   };
   
-  // NEW: Delete individual chat handler
   const deleteChat = (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
       localStorage.removeItem(`chat_${id}`);
@@ -146,7 +148,6 @@ export default function ChatInterface() {
       }
   };
   
-  // NEW: Set Default Model
   const handleSetDefaultModel = (e: React.MouseEvent, modelId: string) => {
     e.stopPropagation();
     const newDefault = defaultModelId === modelId ? '' : modelId;
@@ -174,18 +175,31 @@ export default function ChatInterface() {
       e.preventDefault();
       onSubmit(e as unknown as FormEvent);
     }
-    if (e.key === 'Shift') { // NEW: Shift detection
-        setIsShiftPressed(true);
-    }
   };
   
-  const handleKeyUp = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Shift') { // NEW: Shift detection
-        setIsShiftPressed(false);
-    }
-  };
-
   // --- Effects ---
+  
+  // GLOBAL SHIFT KEY LISTENERS for reliable quick delete
+  useEffect(() => {
+    const handleShiftDown = (e: globalThis.KeyboardEvent) => {
+        if (e.key === 'Shift') {
+            setIsShiftPressed(true);
+        }
+    };
+    const handleShiftUp = (e: globalThis.KeyboardEvent) => {
+        if (e.key === 'Shift') {
+            setIsShiftPressed(false);
+        }
+    };
+
+    window.addEventListener('keydown', handleShiftDown);
+    window.addEventListener('keyup', handleShiftUp);
+
+    return () => {
+        window.removeEventListener('keydown', handleShiftDown);
+        window.removeEventListener('keyup', handleShiftUp);
+    };
+  }, []);
 
   useEffect(() => {
     if (inputRef.current) {
@@ -199,6 +213,10 @@ export default function ChatInterface() {
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
         setIsModelDropdownOpen(false);
       }
+      
+      if (chatListRef.current && !chatListRef.current.contains(event.target as Node)) {
+        setActiveMenuId(null);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -210,7 +228,6 @@ export default function ChatInterface() {
   useEffect(() => {
     setChatList(getChatMetadata());
     
-    // NEW: Load default model
     const savedDefaultModel = localStorage.getItem('default_model') || '';
     setDefaultModelId(savedDefaultModel);
 
@@ -229,7 +246,6 @@ export default function ChatInterface() {
       });
   }, []);
 
-  // SCROLLING FIX: Conditional smooth/instant scroll
   useEffect(() => {
     if (!messagesEndRef.current) return;
     
@@ -316,104 +332,113 @@ export default function ChatInterface() {
   return (
     <div 
       className="flex h-screen bg-[#09090b] text-zinc-100 font-sans overflow-hidden selection:bg-zinc-800 selection:text-white"
-      style={{
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        MozUserSelect: 'none',
-        msUserSelect: 'none',
-        WebkitUserDrag: 'none',
-        userDrag: 'none'
-      }}
+      // FIX: Removed userSelect: 'none' to allow text selection in the chat area
     >
       <motion.div
         initial={{ x: -20, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
-        className="w-[260px] bg-[#09090b] border-r border-zinc-800/50 flex flex-col flex-shrink-0"
+        className="w-[260px] bg-[#09090b] border-r border-zinc-800/50 flex flex-col flex-shrink-0 select-none" // Applied select-none here
         style={{
-          userSelect: 'none',
           WebkitUserSelect: 'none',
           flexShrink: 0,
           position: 'relative'
         }}
         draggable={false}
       >
-        <div className="p-3 select-none">
+        <div className="p-3">
           <button
             onClick={startNewChat}
-            className="flex items-center gap-2 w-full px-3 py-2 bg-zinc-100 text-zinc-900 hover:bg-zinc-200 rounded-lg text-sm font-medium transition-colors select-none"
+            className="flex items-center gap-2 w-full px-3 py-2 bg-zinc-100 text-zinc-900 hover:bg-zinc-200 rounded-lg text-sm font-medium transition-colors"
             draggable={false}
           >
             <Plus size={16} /> New Chat
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 select-none">
-          <div className="text-[11px] font-medium text-zinc-500 px-2 mb-2 uppercase tracking-wider select-none">History</div>
+        <div ref={chatListRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800">
+          <div className="text-[11px] font-medium text-zinc-500 px-2 mb-2 uppercase tracking-wider">History</div>
 
           {chatList.map((chat) => (
             <div
               key={chat.id}
               className={cn(
-                'group relative px-3 py-2 rounded-lg text-sm truncate cursor-pointer transition-all flex items-center justify-between select-none',
+                'group relative px-3 py-2 rounded-lg text-sm truncate transition-all flex items-center justify-between',
                 chat.id === chatId
                   ? 'bg-zinc-800 text-zinc-100'
                   : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
               )}
               draggable={false}
-              onClick={() => loadChat(chat.id)}
             >
-              <span className="truncate pr-8">{chat.title}</span>
+              <button onClick={() => loadChat(chat.id)} className="flex-1 text-left truncate pr-8 cursor-pointer">
+                  {chat.title}
+              </button>
 
-              {/* NEW: Delete Button Container */}
               <div 
                   className={cn(
-                      "absolute right-2 top-1/2 -translate-y-1/2 transition-opacity duration-150 flex items-center",
-                      isShiftPressed || chat.id === chatId 
-                          ? 'opacity-100' 
+                      "absolute right-2 top-1/2 -translate-y-1/2 transition-opacity duration-150 flex items-center gap-1",
+                      chat.id === chatId || activeMenuId === chat.id || (isShiftPressed && chat.id !== chatId)
+                          ? 'opacity-100'
                           : 'opacity-0 group-hover:opacity-100'
                   )}
                   onClick={(e) => e.stopPropagation()}
               >
-                  {/* Quick Delete Button (Appears on Shift or Hover) */}
+                  {/* Dedicated Shift Quick-Delete Button (Trash Icon) */}
                   {isShiftPressed && chat.id !== chatId && (
                       <button
                           onClick={(e) => deleteChat(e, chat.id)}
-                          className="p-1.5 rounded-full text-zinc-500 hover:text-red-400 hover:bg-zinc-700/50 transition-colors"
+                          className="p-1.5 rounded-full text-red-400 bg-zinc-700/50 hover:bg-zinc-600 transition-colors z-50"
+                          title="Quick Delete (Shift + Click)"
                       >
                           <Trash2 size={14} />
                       </button>
                   )}
 
-                  {/* Context Menu Button (Appears on Hover/Active Chat) */}
-                  <div className="relative group/menu">
-                      <button
-                          className="p-1.5 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 transition-colors"
-                          onClick={(e) => e.stopPropagation()}
+                  {/* Dedicated Context Menu Button (3 Dots) */}
+                  <button
+                      onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuId(activeMenuId === chat.id ? null : chat.id);
+                      }}
+                      className={cn(
+                          "p-1.5 rounded-full transition-colors",
+                          activeMenuId === chat.id 
+                              ? "bg-zinc-700 text-zinc-300"
+                              : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50",
+                          isShiftPressed && chat.id !== chatId ? 'hidden' : ''
+                      )}
+                      title="More options"
+                  >
+                      <MoreVertical size={14} />
+                  </button>
+              </div>
+
+              <AnimatePresence>
+                  {activeMenuId === chat.id && (
+                      <motion.div
+                          initial={{ opacity: 0, scale: 0.9, y: 5 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.9, y: 5 }}
+                          transition={{ duration: 0.1 }}
+                          className="absolute right-2 top-full mt-1 w-32 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl text-left text-zinc-300 z-40"
+                          style={{ transformOrigin: 'top right' }}
                       >
-                          <MoreVertical size={14} />
-                      </button>
-                      
-                      {/* Dropdown Menu - Always Hidden, Opens via Custom Logic (Simplified for CSS-only display here) */}
-                      {/* For simplicity and speed, we will use a basic hidden element activated by click outside of the component logic */}
-                      {/* For full functionality, this would need an active state and component to handle mouse position/clicks */}
-                      <div className="absolute right-0 top-full mt-1 w-32 hidden group-hover/menu:block bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl text-left text-zinc-300 z-40">
                           <button
-                              onClick={(e) => deleteChat(e, chat.id)}
+                              onClick={(e) => {deleteChat(e, chat.id); setActiveMenuId(null);}}
                               className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-zinc-800 rounded-md"
                           >
                               <Trash2 size={14} /> Delete
                           </button>
-                      </div>
-                  </div>
-              </div>
+                      </motion.div>
+                  )}
+              </AnimatePresence>
             </div>
           ))}
         </div>
 
-        <div className="p-3 border-t border-zinc-800/50 select-none">
+        <div className="p-3 border-t border-zinc-800/50">
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="flex items-center gap-3 px-2 py-2 w-full rounded-lg hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-200 transition-all select-none"
+            className="flex items-center gap-3 px-2 py-2 w-full rounded-lg hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-200 transition-all"
             draggable={false}
           >
             <div className="w-6 h-6 rounded bg-zinc-700 flex items-center justify-center">
@@ -426,8 +451,7 @@ export default function ChatInterface() {
       </motion.div>
 
       <div className="flex-1 flex flex-col relative min-w-0">
-        <header className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-20 bg-[#09090b]/80 backdrop-blur-sm">
-          {/* Custom Animated Model Dropdown */}
+        <header className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-20 bg-[#09090b]/80 backdrop-blur-sm select-none">
           <div ref={modelDropdownRef} className="relative z-30">
             <button
               onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
@@ -472,7 +496,6 @@ export default function ChatInterface() {
                       </button>
 
                       <div className="flex items-center gap-2">
-                          {/* NEW: Default Model Star */}
                           <button
                               onClick={(e) => handleSetDefaultModel(e, m.id)}
                               className={cn(
@@ -506,7 +529,7 @@ export default function ChatInterface() {
         <div className="flex-1 overflow-y-auto scroll-smooth">
           <div className="max-w-4xl mx-auto px-4 py-20">
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center min-h-[40vh] text-center space-y-4">
+              <div className="flex flex-col items-center justify-center min-h-[40vh] text-center space-y-4 select-none">
                 <div className="w-16 h-16 rounded-2xl bg-zinc-900 flex items-center justify-center mb-6 shadow-inner border border-zinc-800">
                   <Terminal size={32} className="text-zinc-500" />
                 </div>
@@ -523,7 +546,7 @@ export default function ChatInterface() {
             </AnimatePresence>
 
             {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
-              <div className="flex items-center gap-2 text-zinc-500 text-sm mt-4 ml-1">
+              <div className="flex items-center gap-2 text-zinc-500 text-sm mt-4 ml-1 select-none">
                 <Loader2 size={14} className="animate-spin" /> Generating...
               </div>
             )}
@@ -532,7 +555,7 @@ export default function ChatInterface() {
           </div>
         </div>
 
-        <div className="p-6 pt-2 bg-[#09090b]">
+        <div className="p-6 pt-2 bg-[#09090b] select-none">
           <div className="max-w-4xl mx-auto relative group">
             <div className="absolute inset-0 bg-zinc-800/20 rounded-[28px] blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
@@ -546,28 +569,27 @@ export default function ChatInterface() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                onKeyUp={handleKeyUp} 
                 placeholder="Ask anything..."
                 rows={1}
-                className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base px-5 py-4 focus:outline-none resize-none select-none [resize:none] max-h-[200px] min-h-[56px] overflow-hidden leading-relaxed max-w-full"
+                className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base px-5 py-4 focus:outline-none resize-none [resize:none] max-h-[200px] min-h-[56px] overflow-hidden leading-relaxed max-w-full"
                 style={{ 
                   height: '56px', 
                   resize: 'none',
                   overflow: 'hidden',
-                  userSelect: 'text'
+                  userSelect: 'text' // Allows selection in the textarea
                 }}
                 onInput={handleInputResize}
                 disabled={isLoading}
                 draggable={false}
               />
 
-              <div className="flex justify-between items-center px-3 pb-3 pt-1 select-none">
+              <div className="flex justify-between items-center px-3 pb-3 pt-1">
                 <div className="flex gap-1"></div>
                 <button
                   type="submit"
                   disabled={isLoading || !input.trim()}
                   className={cn(
-                    'p-2 rounded-full mb-0.5 transition-all duration-200 select-none',
+                    'p-2 rounded-full mb-0.5 transition-all duration-200',
                     input.trim()
                       ? 'bg-zinc-100 text-zinc-900 hover:bg-white shadow-md hover:shadow-zinc-100/20'
                       : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
@@ -580,7 +602,7 @@ export default function ChatInterface() {
             </form>
 
             <div className="text-center mt-3">
-              <p className="text-[11px] text-zinc-600 select-none">AI can make mistakes. Please use responsibly.</p>
+              <p className="text-[11px] text-zinc-600">AI can make mistakes. Please use responsibly.</p>
             </div>
           </div>
         </div>
@@ -599,18 +621,18 @@ export default function ChatInterface() {
             onClick={(e) => e.stopPropagation()}
             style={{ userSelect: 'none' }}
           >
-            <div className="flex justify-between items-center mb-6 select-none">
-              <h2 className="text-lg font-semibold text-zinc-100 select-none">Settings</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-semibold text-zinc-100">Settings</h2>
               <button className="text-zinc-500 hover:text-zinc-300" onClick={() => setIsSettingsOpen(false)}>
                 <X size={20} />
               </button>
             </div>
 
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between">
-              <span className="text-sm text-red-400 font-medium select-none">Clear all chats</span>
+              <span className="text-sm text-red-400 font-medium">Clear all chats</span>
               <button
                 onClick={deleteAllChats}
-                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-md transition-colors select-none"
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-md transition-colors"
               >
                 Delete
               </button>
