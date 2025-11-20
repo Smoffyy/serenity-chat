@@ -5,9 +5,14 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import remarkBreaks from 'remark-breaks'; 
-import 'highlight.js/styles/atom-one-dark.css';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+
+import 'highlight.js/styles/atom-one-dark.css';
 
 interface MessageBubbleProps {
   role: 'user' | 'assistant';
@@ -127,8 +132,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content, sho
                     <div className="inline">
                       <ReactMarkdown
                         components={MarkdownComponents}
-                        remarkPlugins={[remarkGfm, remarkBreaks]} 
-                        rehypePlugins={[rehypeHighlight]}
+                        // ADDED REMARK-MATH
+                        remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
+                        // ADDED REHYPE-KATEX
+                        rehypePlugins={[rehypeHighlight, rehypeKatex]}
                         // Adding key helps ReactMarkdown re-parse correctly as finalMarkdown grows
                         key={finalMarkdown.length} 
                         skipHtml={false}
@@ -150,8 +157,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content, sho
         // Strategy 3: If complete or user message, use ReactMarkdown for full formatting
         <ReactMarkdown
           components={MarkdownComponents}
-          remarkPlugins={[remarkGfm, remarkBreaks]} 
-          rehypePlugins={[rehypeHighlight]}
+          // ADDED REMARK-MATH
+          remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} 
+          // ADDED REHYPE-KATEX
+          rehypePlugins={[rehypeHighlight, rehypeKatex]}
           skipHtml={false}
         >
           {content}
