@@ -12,11 +12,30 @@ import { motion } from 'framer-motion';
 interface MessageBubbleProps {
   role: 'user' | 'assistant';
   content: string;
+  showCursor?: boolean; 
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content }) => {
+// Blinking Cursor Component - UPDATED STYLING
+const TypingCursor = () => (
+    <motion.span
+        aria-hidden="true"
+        className="inline-block w-[10px] h-4 ml-0.5 bg-white align-middle translate-y-[0px]"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{
+            duration: 0.5,
+            repeat: Infinity,
+            repeatType: "reverse",
+            ease: "easeInOut",
+        }}
+    />
+);
+
+
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content, showCursor = false }) => {
   const isUser = role === 'user';
 
+  // ReactMarkdown Components (Used when NOT streaming or for User messages)
   const MarkdownComponents: Record<string, React.FC<any>> = {
     p: ({ children }) => <p className="mb-3 last:mb-0 leading-7 whitespace-pre-wrap break-words">{children}</p>,
     ul: ({ children }) => <ul className="list-disc list-outside space-y-1 mb-4 pl-5">{children}</ul>,
@@ -30,7 +49,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content }) =
       </a>
     ),
     blockquote: ({ children }) => (
-      <blockquote className="border-l-2 border-zinc-600 pl-4 italic text-zinc-400 my-4">{children}</blockquote>
+      <blockquote className="border-l-4 border-zinc-600 pl-4 italic text-zinc-400 my-4">{children}</blockquote>
     ),
     code: ({ node, className, children, ...props }) => {
       const match = /language-(\w+)/.exec(className || '');
@@ -57,7 +76,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content }) =
         </div>
       );
     },
-    // Fix for table rendering
     table: ({ children }) => (
       <div className="w-full overflow-x-auto my-4 rounded-lg border border-zinc-700">
         <table className="w-full text-sm text-left border-collapse">{children}</table>
@@ -73,8 +91,72 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content }) =
         <tr className="border-b border-zinc-700 last:border-b-0 hover:bg-zinc-800/20 transition-colors">{children}</tr>
     ),
     br: () => <br />,
-    text: ({ children }) => <span className="whitespace-pre-wrap break-words">{children}</span>,
   };
+  
+  // Conditional content rendering based on streaming status
+  const renderedContent = showCursor && !isUser
+    ? (() => {
+        // --- LIVE MARKDOWN STREAMING LOGIC ---
+        
+        const contentToParse = content;
+        let finalMarkdown = '';
+        let streamingChunk = '';
+
+        // Safest Heuristic: Split content into a safe-to-parse part and a raw streaming part.
+        // We find the index of the last *complete* block break (\n\n).
+        const lastBlockBreakIndex = contentToParse.lastIndexOf('\n\n');
+
+        if (lastBlockBreakIndex !== -1) {
+            // Everything *before* the last block break is considered safe Markdown.
+            // We use lastBlockBreakIndex for the substring length.
+            finalMarkdown = contentToParse.substring(0, lastBlockBreakIndex);
+            
+            // The rest, starting from the lastBlockBreakIndex, is the raw chunk.
+            streamingChunk = contentToParse.substring(lastBlockBreakIndex);
+            
+        } else {
+            // If no major break, the entire content is treated as a raw chunk.
+            finalMarkdown = '';
+            streamingChunk = contentToParse;
+        }
+
+        return (
+            <>
+                {/* 1. Render the fully parsed Markdown blocks */}
+                {finalMarkdown.length > 0 && (
+                    <div className="inline">
+                      <ReactMarkdown
+                        components={MarkdownComponents}
+                        remarkPlugins={[remarkGfm, remarkBreaks]} 
+                        rehypePlugins={[rehypeHighlight]}
+                        // Adding key helps ReactMarkdown re-parse correctly as finalMarkdown grows
+                        key={finalMarkdown.length} 
+                        skipHtml={false}
+                      >
+                        {finalMarkdown}
+                      </ReactMarkdown>
+                    </div>
+                )}
+                
+                {/* 2. Render the raw, streaming chunk + cursor */}
+                <span className="whitespace-pre-wrap break-words leading-7 text-zinc-100 inline">
+                    {streamingChunk}
+                    <TypingCursor />
+                </span>
+            </>
+        );
+    })()
+    : (
+        // Strategy 3: If complete or user message, use ReactMarkdown for full formatting
+        <ReactMarkdown
+          components={MarkdownComponents}
+          remarkPlugins={[remarkGfm, remarkBreaks]} 
+          rehypePlugins={[rehypeHighlight]}
+          skipHtml={false}
+        >
+          {content}
+        </ReactMarkdown>
+      );
 
   return (
     <motion.div
@@ -85,21 +167,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ role, content }) =
     >
       <div
         className={cn(
-          'max-w-3xl',
           isUser
-            ? 'w-fit bg-[#2f2f2f] text-zinc-100 px-5 py-3 rounded-[26px] rounded-tr-sm max-w-[85%] md:max-w-[70%]' // w-fit is correct for user bubble
-            : 'w-full'
+            ? 'w-fit max-w-[85%] sm:max-w-[70%] bg-[#2f2f2f] text-zinc-100 px-5 py-3 rounded-[26px] rounded-tr-sm shadow-lg' 
+            : 'w-full max-w-full' 
         )}
       >
         <div className={cn('prose prose-invert max-w-none', isUser ? 'text-[15px]' : 'text-[16px]')}>
-          <ReactMarkdown
-            components={MarkdownComponents}
-            remarkPlugins={[remarkGfm, remarkBreaks]} 
-            rehypePlugins={[rehypeHighlight]}
-            skipHtml={false}
-          >
-            {content}
-          </ReactMarkdown>
+          {renderedContent}
         </div>
       </div>
     </motion.div>
