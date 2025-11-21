@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   motion,
   AnimatePresence,
@@ -33,6 +33,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSettingsOpen,
   setActiveMenuId,
 }) => {
+  const [hoveredChatId, setHoveredChatId] = useState<string | null>(null);
+
   return (
     <motion.div
       initial={{ x: -260 }}
@@ -72,6 +74,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 transition: { duration: 0.2 },
               }}
               transition={{ ...spring, duration: 0.3, type: "tween" }}
+              onMouseEnter={() => setHoveredChatId(chat.id)}
+              onMouseLeave={() => setHoveredChatId(null)}
               className={cn(
                 "group relative rounded-xl text-sm transition-all flex items-center justify-between",
                 chat.id === chatId
@@ -88,52 +92,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </motion.button>
 
               <div
-                className={cn(
-                  "absolute right-2 top-1/2 -translate-y-1/2 transition-opacity duration-150 flex items-center gap-1 z-10",
-                  chat.id === chatId ||
-                    activeMenuId === chat.id ||
-                    (isShiftPressed && chat.id !== chatId)
-                    ? "opacity-100"
-                    : "opacity-0 group-hover:opacity-100"
-                )}
+                className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10"
                 onClick={(e) => e.stopPropagation()}
               >
-                {isShiftPressed && chat.id !== chatId && (
-                  <motion.button
-                    initial={{ scale: 0.5, rotate: -45 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    exit={{ scale: 0.5, rotate: 45 }}
-                    transition={spring}
-                    onClick={(e) => onDeleteChat(e, chat.id)}
-                    className="p-1.5 rounded-full text-red-400 bg-zinc-700/80 hover:bg-zinc-600 transition-colors"
-                    title="Quick Delete (Shift + Click)"
-                    whileTap={{ scale: 0.8 }}
-                  >
-                    <Trash2 size={14} />
-                  </motion.button>
-                )}
-
-                <motion.button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveMenuId(activeMenuId === chat.id ? null : chat.id);
-                  }}
-                  className={cn(
-                    "p-1.5 rounded-full transition-colors",
-                    activeMenuId === chat.id
-                      ? "bg-zinc-700 text-zinc-300"
-                      : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50",
-                    isShiftPressed && chat.id !== chatId ? "hidden" : ""
-                  )}
-                  title="More options"
-                  whileTap={{ scale: 0.8 }}
-                >
-                  <MoreVertical size={14} />
-                </motion.button>
+                <AnimatePresence mode="wait">
+                  {hoveredChatId === chat.id && isShiftPressed ? (
+                    // Show trash icon when hovering and shift is pressed
+                    <motion.button
+                      key="trash"
+                      initial={{ scale: 0.5, rotate: -45, opacity: 0 }}
+                      animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                      exit={{ scale: 0.5, rotate: 45, opacity: 0 }}
+                      transition={spring}
+                      onClick={(e) => onDeleteChat(e, chat.id)}
+                      className="p-1.5 rounded-full text-red-400 bg-zinc-700/80 hover:bg-zinc-600 transition-colors"
+                      title="Shift + Click to Delete"
+                      whileTap={{ scale: 0.8 }}
+                    >
+                      <Trash2 size={14} />
+                    </motion.button>
+                  ) : hoveredChatId === chat.id && !isShiftPressed ? (
+                    // Show three dots when hovering without shift
+                    <motion.button
+                      key="dots"
+                      initial={{ scale: 0.5, rotate: -45, opacity: 0 }}
+                      animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                      exit={{ scale: 0.5, rotate: 45, opacity: 0 }}
+                      transition={spring}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveMenuId(activeMenuId === chat.id ? null : chat.id);
+                      }}
+                      className={cn(
+                        "p-1.5 rounded-full transition-colors",
+                        activeMenuId === chat.id
+                          ? "bg-zinc-700 text-zinc-300"
+                          : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50"
+                      )}
+                      title="More options"
+                      whileTap={{ scale: 0.8 }}
+                    >
+                      <MoreVertical size={14} />
+                    </motion.button>
+                  ) : null}
+                </AnimatePresence>
               </div>
 
               <AnimatePresence>
-                {activeMenuId === chat.id && (
+                {activeMenuId === chat.id && hoveredChatId === chat.id && !isShiftPressed && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.9, y: 5 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}

@@ -127,6 +127,7 @@ export default function ChatInterface() {
       localStorage.setItem("all_chats", JSON.stringify(updatedList));
       setChatList(updatedList);
 
+      // If deleting current chat, go back to home
       if (chatId === id) startNewChat();
     },
     [chatId, chatList, startNewChat]
@@ -294,6 +295,15 @@ export default function ChatInterface() {
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
     };
   }, [messages, isLoading, isInitialState]);
+
+  useEffect(() => {
+    if (!isLoading && messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg?.role === "assistant") {
+        setTimeout(() => inputRef.current?.focus(), 100);
+      }
+    }
+  }, [isLoading, messages]);
 
   /* ---------- SUBMIT ---------- */
   const handleSubmit = useCallback(
