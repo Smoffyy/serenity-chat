@@ -85,7 +85,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <motion.button
                 whileHover={{ x: 2 }}
-                onClick={() => onLoadChat(chat.id)}
+                onClick={(e) => {
+                  if (e.button === 1) {
+                    // Middle click
+                    e.preventDefault();
+                    onLoadChat(chat.id, true);
+                  } else {
+                    // Regular click
+                    onLoadChat(chat.id);
+                  }
+                }}
+                onAuxClick={(e) => {
+                  if (e.button === 1) {
+                    e.preventDefault();
+                    onLoadChat(chat.id, true);
+                  }
+                }}
                 className="flex-1 text-left truncate px-3 py-2 cursor-pointer pr-10"
               >
                 {chat.title}

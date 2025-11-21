@@ -8,6 +8,7 @@ import React, {
   KeyboardEvent,
   useCallback,
 } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 import type { Message, ChatMetadata, ModelData } from "./types";
@@ -20,14 +21,20 @@ import { useChatHistory } from "./hooks/useChatHistory";
 import { useChatSubmit } from "./hooks/useChatSubmit";
 
 export default function ChatInterface() {
+  /* ---------- ROUTER & PARAMS ---------- */
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlChatId = searchParams.get("chat");
+
   /* ---------- STATE ---------- */
   const [models, setModels] = useState<ModelData[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [defaultModelId, setDefaultModelId] = useState<string>("");
-  const [chatId, setChatId] = useState<string>(() => Date.now().toString());
+  const [chatId, setChatId] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [generatingChatId, setGeneratingChatId] = useState<string | null>(null);
   const [chatList, setChatList] = useState<ChatMetadata[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
@@ -46,40 +53,15 @@ export default function ChatInterface() {
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
 
-  /* ---------- HOOKS ---------- */
-  const { getChatMetadata, saveHistory: saveHistoryBase } = useChatHistory(chatId);
-  const { onSubmit: submitChat } = useChatSubmit({
-    selectedModelId,
-    messages,
-    setMessages,
-    saveHistory: (msgs, shouldUpdateDate) => {
-      const updatedList = saveHistoryBase(msgs, shouldUpdateDate);
-      setChatList(updatedList);
-    },
-    setIsLoading,
-  });
-
-  /* ---------- SETTINGS ---------- */
-  const toggleCursor = () => {
-    const newState = !isCursorEnabled;
-    setIsCursorEnabled(newState);
-    localStorage.setItem("cursor_enabled", String(newState));
-  };
-
-  /* ---------- CHAT LOGIC ---------- */
-  const loadChat = useCallback(
-    (id: string) => {
-      if (messages.length > 0 && chatId !== id && !isNewChat) {
-        saveHistoryBase(messages, false);
-      }
-
-      setActiveMenuId(null);
-      setChatId(id);
+  /* ---------- SYNC WITH URL ---------- */
+  useEffect(() => {
+    if (urlChatId) {
+      setChatId(urlChatId);
       setMessages([]);
       setInput("");
       shouldAutoScrollRef.current = true;
 
-      const saved = localStorage.getItem(`chat_${id}`);
+      const saved = localStorage.getItem(`chat_${urlChatId}`);
       if (saved) {
         try {
           setMessages(JSON.parse(saved));
@@ -93,22 +75,71 @@ export default function ChatInterface() {
       }
 
       setTimeout(() => inputRef.current?.focus(), 300);
+    } else {
+      // No chat in URL, create new chat
+      const newChatId = Date.now().toString();
+      setChatId(newChatId);
+      setMessages([]);
+      setInput("");
+      setIsNewChat(true);
+      router.push(`?chat=${newChatId}`);
+    }
+  }, [urlChatId, router]);
+
+  /* ---------- HOOKS ---------- */
+  const { getChatMetadata, saveHistory: saveHistoryBase } = useChatHistory(chatId);
+  const { onSubmit: submitChat } = useChatSubmit({
+    selectedModelId,
+    messages,
+    setMessages,
+    saveHistory: (msgs, shouldUpdateDate) => {
+      const updatedList = saveHistoryBase(msgs, shouldUpdateDate);
+      setChatList(updatedList);
     },
-    [messages, saveHistoryBase, chatId, isNewChat]
+    setIsLoading,
+    setGeneratingChatId,
+    currentChatId: chatId,
+  });
+
+  /* ---------- SETTINGS ---------- */
+  const toggleCursor = () => {
+    const newState = !isCursorEnabled;
+    setIsCursorEnabled(newState);
+    localStorage.setItem("cursor_enabled", String(newState));
+  };
+
+  /* ---------- CHAT LOGIC ---------- */
+  const loadChat = useCallback(
+    (id: string, newTab: boolean = false) => {
+      if (newTab) {
+        window.open(`${window.location.pathname}?chat=${id}`, "_blank");
+        return;
+      }
+
+      if (messages.length > 0 && chatId !== id && !isNewChat) {
+        saveHistoryBase(messages, false);
+      }
+
+      setActiveMenuId(null);
+      router.push(`?chat=${id}`);
+    },
+    [messages, chatId, isNewChat, saveHistoryBase, router]
   );
 
   const startNewChat = useCallback(() => {
     if (messages.length > 0 && !isNewChat) saveHistoryBase(messages, false);
 
+    const newChatId = Date.now().toString();
     setActiveMenuId(null);
-    setChatId(Date.now().toString());
     setMessages([]);
     setInput("");
     setIsNewChat(true);
     shouldAutoScrollRef.current = true;
     if (defaultModelId) setSelectedModelId(defaultModelId);
+    
+    router.push(`?chat=${newChatId}`);
     setTimeout(() => inputRef.current?.focus(), 300);
-  }, [messages, isNewChat, saveHistoryBase, defaultModelId]);
+  }, [messages, isNewChat, saveHistoryBase, defaultModelId, router]);
 
   const deleteAllChats = useCallback(() => {
     chatList.forEach((c) => localStorage.removeItem(`chat_${c.id}`));
@@ -127,7 +158,7 @@ export default function ChatInterface() {
       localStorage.setItem("all_chats", JSON.stringify(updatedList));
       setChatList(updatedList);
 
-      // If deleting current chat, go back to home
+      // If deleting current chat, go to new chat
       if (chatId === id) startNewChat();
     },
     [chatId, chatList, startNewChat]
@@ -296,6 +327,7 @@ export default function ChatInterface() {
     };
   }, [messages, isLoading, isInitialState]);
 
+  /* ---------- AUTO FOCUS AFTER RESPONSE ---------- */
   useEffect(() => {
     if (!isLoading && messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
@@ -315,10 +347,11 @@ export default function ChatInterface() {
 
       shouldAutoScrollRef.current = true;
       setIsNewChat(false);
+      setGeneratingChatId(chatId);
 
       await submitChat(e, input, setInput);
     },
-    [selectedModelId, input, isLoading, submitChat]
+    [selectedModelId, input, isLoading, submitChat, chatId]
   );
 
   return (

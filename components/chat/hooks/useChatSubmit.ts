@@ -7,6 +7,8 @@ interface UseChatSubmitProps {
   setMessages: (msgs: Message[] | ((prev: Message[]) => Message[])) => void;
   saveHistory: (msgs: Message[], shouldUpdateDate: boolean) => void;
   setIsLoading: (loading: boolean) => void;
+  setGeneratingChatId: (id: string | null) => void;
+  currentChatId: string;
 }
 
 export const useChatSubmit = ({
@@ -15,6 +17,8 @@ export const useChatSubmit = ({
   setMessages,
   saveHistory,
   setIsLoading,
+  setGeneratingChatId,
+  currentChatId,
 }: UseChatSubmitProps) => {
   const onSubmit = useCallback(
     async (e: React.FormEvent, input: string, setInput: (val: string) => void) => {
@@ -23,6 +27,7 @@ export const useChatSubmit = ({
 
       const userText = input.trim();
       setInput("");
+      const submittingChatId = currentChatId;
 
       const userMsg: Message = {
         id: Date.now().toString(),
@@ -32,6 +37,7 @@ export const useChatSubmit = ({
 
       setMessages((prev) => [...prev, userMsg]);
       setIsLoading(true);
+      setGeneratingChatId(submittingChatId);
 
       const aiMsgId = `${Date.now() + 1}`;
 
@@ -64,24 +70,55 @@ export const useChatSubmit = ({
           const chunk = decoder.decode(value, { stream: true });
           rawAccumulated += chunk;
 
-          setMessages((prev) => {
-            if (!prev.some((m) => m.id === aiMsgId)) {
-              return [
-                ...prev,
-                { id: aiMsgId, role: "assistant", content: rawAccumulated },
-              ];
+          // Only update if we're still in the same chat that initiated the request
+          if (submittingChatId === currentChatId) {
+            setMessages((prev) => {
+              if (!prev.some((m) => m.id === aiMsgId)) {
+                return [
+                  ...prev,
+                  { id: aiMsgId, role: "assistant", content: rawAccumulated },
+                ];
+              }
+              return prev.map((m) =>
+                m.id === aiMsgId ? { ...m, content: rawAccumulated } : m
+              );
+            });
+          } else {
+            // If user switched chats, save to localStorage instead
+            const savedChat = localStorage.getItem(`chat_${submittingChatId}`);
+            if (savedChat) {
+              const chatMessages = JSON.parse(savedChat) as Message[];
+              const existingAiMsg = chatMessages.find((m) => m.id === aiMsgId);
+              if (existingAiMsg) {
+                existingAiMsg.content = rawAccumulated;
+              } else {
+                chatMessages.push({
+                  id: aiMsgId,
+                  role: "assistant",
+                  content: rawAccumulated,
+                });
+              }
+              localStorage.setItem(`chat_${submittingChatId}`, JSON.stringify(chatMessages));
             }
-            return prev.map((m) =>
-              m.id === aiMsgId ? { ...m, content: rawAccumulated } : m
-            );
-          });
+          }
         }
 
         const finalMsg = { id: aiMsgId, role: "assistant", content: rawAccumulated };
-        const finalHistory = [...messages, userMsg, finalMsg];
-
-        setMessages(finalHistory);
-        saveHistory(finalHistory, true);
+        
+        // Save the final message to the correct chat
+        if (submittingChatId === currentChatId) {
+          const finalHistory = [...messages, userMsg, finalMsg];
+          setMessages(finalHistory);
+          saveHistory(finalHistory, true);
+        } else {
+          const savedChat = localStorage.getItem(`chat_${submittingChatId}`);
+          if (savedChat) {
+            const chatMessages = JSON.parse(savedChat) as Message[];
+            chatMessages.push(userMsg);
+            chatMessages.push(finalMsg);
+            localStorage.setItem(`chat_${submittingChatId}`, JSON.stringify(chatMessages));
+          }
+        }
       } catch (err) {
         console.error("Chat error:", err);
         setMessages((prev) =>
@@ -89,9 +126,10 @@ export const useChatSubmit = ({
         );
       } finally {
         setIsLoading(false);
+        setGeneratingChatId(null);
       }
     },
-    [selectedModelId, messages, setMessages, saveHistory, setIsLoading]
+    [selectedModelId, messages, setMessages, saveHistory, setIsLoading, setGeneratingChatId, currentChatId]
   );
 
   return { onSubmit };
