@@ -500,6 +500,30 @@ export default function ChatInterface() {
   /* ---------- Render ---------- */
   return (
     <div className="flex h-screen bg-[#06060a] text-zinc-100 font-sans overflow-hidden selection:bg-zinc-700 selection:text-white">
+      
+      {/* INJECTED STYLES FOR DARK SCROLLBARS */}
+      <style jsx global>{`
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+          background-color: #27272a; /* zinc-800 */
+          border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background-color: #3f3f46; /* zinc-700 */
+        }
+        /* Firefox support */
+        * {
+          scrollbar-width: thin;
+          scrollbar-color: #27272a transparent;
+        }
+      `}</style>
+
       {/* Sidebar */}
       <motion.div
         initial={{ x: -260 }}
@@ -508,26 +532,26 @@ export default function ChatInterface() {
         className="w-[260px] bg-[#09090b] border-r border-zinc-800/50 flex flex-col flex-shrink-0 select-none"
         style={{ flexShrink: 0, position: "relative" }}
       >
-        {/* New chat button */}
+        {/* New chat button - UPDATED TO DARK THEME */}
         <div className="p-3">
           <motion.button
             whileHover={{
               scale: 1.01,
-              boxShadow: "0 4px 10px rgba(255,255,255,.1)",
+              boxShadow: "0 4px 10px rgba(0,0,0,.3)",
             }}
             whileTap={{ scale: 0.98 }}
             transition={spring}
             onClick={startNewChat}
-            className="flex items-center gap-2 w-full px-3 py-2 bg-zinc-100 text-zinc-900 hover:bg-white rounded-xl text-sm font-semibold transition-colors shadow-lg shadow-zinc-500/10"
+            className="flex items-center gap-2 w-full px-3 py-2 bg-zinc-900 text-zinc-200 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-sm font-semibold transition-colors shadow-lg shadow-zinc-900/20"
           >
-            <Plus size={16} /> Start New Chat
+            <Plus size={16} className="text-zinc-400" /> Start New Chat
           </motion.button>
         </div>
 
         {/* History list */}
         <div
           ref={chatListRef}
-          className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800/80"
+          className="flex-1 overflow-y-auto px-3 py-2 space-y-1"
         >
           <div className="text-[11px] font-medium text-zinc-500 px-2 mb-2 uppercase tracking-wider">
             History
