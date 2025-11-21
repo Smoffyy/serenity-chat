@@ -162,7 +162,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           )}
         >
           <p className="text-[11px] text-zinc-600">
-            AI can make mistakes. Please use responsibly.
+            Always fact check important information.
           </p>
         </div>
       </div>
