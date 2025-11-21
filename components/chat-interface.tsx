@@ -22,6 +22,7 @@ import {
   Trash2,
   MoreVertical,
   Zap,
+  Terminal,
 } from "lucide-react";
 import {
   motion,
@@ -864,15 +865,33 @@ export default function ChatInterface() {
               </div>
             </div>
 
-            {/* Input Area Wrapper - Animates via Framer Motion Layout */}
+            <AnimatePresence>
+              {isInitialState && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20, transition: { duration: 0.3 } }}
+                  className="flex flex-col items-center justify-center mb-8 z-10"
+                >
+                  <div className="w-16 h-16 rounded-3xl bg-zinc-800/50 flex items-center justify-center mb-4 shadow-2xl border border-zinc-700/70 backdrop-blur-sm">
+                    <Terminal size={32} className="text-zinc-100" />
+                  </div>
+                  <h2 className="text-2xl font-semibold text-zinc-100">
+                    Hello! How can I help you today?
+                  </h2>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Input Area Wrapper */}
             <motion.div 
               layout
               transition={layoutSpring}
               className={cn(
                 "bg-[#06060a] select-none w-full z-20",
                 isInitialState 
-                  ? "p-4 max-w-3xl"                     // Centered styling
-                  : "p-6 pt-2 border-t border-zinc-800/50" // Bottom styling
+                  ? "p-4 max-w-3xl"
+                  : "p-6 pt-2 border-t border-zinc-800/50"
               )}
             >
               <div className={cn("mx-auto relative group transition-all", isInitialState ? "max-w-3xl" : "max-w-4xl")}>
