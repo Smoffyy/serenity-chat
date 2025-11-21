@@ -1,12 +1,13 @@
 "use client";
 
-import {
+import React, {
   useEffect,
   useState,
   useRef,
   FormEvent,
   KeyboardEvent,
   useCallback,
+  memo, // Import memo
 } from "react";
 import { MessageBubble } from "./message-bubble";
 import {
@@ -33,6 +34,7 @@ import {
 } from "framer-motion";
 import { cn } from "@/lib/utils";
 
+/* ---------- TYPES ---------- */
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -49,18 +51,13 @@ interface ModelData {
   id: string;
 }
 
-/**
- * Standard spring for small UI elements.
- */
+/* ---------- ANIMATION CONSTANTS ---------- */
 const spring: Transition = {
   type: "spring",
   stiffness: 400,
   damping: 20,
 };
 
-/**
- * Slower, bouncier spring for layout shifts.
- */
 const layoutSpring: Transition = {
   type: "spring",
   stiffness: 300,
@@ -68,9 +65,20 @@ const layoutSpring: Transition = {
   mass: 1.2,
 };
 
+/* ---------- MEMOIZED COMPONENTS ---------- */
+
 /**
- * Blinking cursor for the "Thinking" text state.
+ * Performance optimization: Memoize the MessageBubble.
+ * This prevents all previous messages from re-rendering when you type in the input box.
  */
+const MemoizedMessageBubble = memo(MessageBubble, (prev, next) => {
+  return (
+    prev.content === next.content &&
+    prev.role === next.role &&
+    prev.showCursor === next.showCursor
+  );
+});
+
 const TypingCursor = () => (
   <motion.span
     aria-hidden="true"
@@ -86,9 +94,6 @@ const TypingCursor = () => (
   />
 );
 
-/**
- * Bouncing Loader Component (3 dots).
- */
 const BouncingLoader = () => {
   const dotTransition = {
     duration: 0.6,
@@ -108,7 +113,7 @@ const BouncingLoader = () => {
           }}
           transition={{
             ...dotTransition,
-            delay: i * 0.15, // Stagger the bounce
+            delay: i * 0.15,
           }}
         />
       ))}
@@ -117,7 +122,7 @@ const BouncingLoader = () => {
 };
 
 export default function ChatInterface() {
-  /* ---------- State ---------- */
+  /* ---------- STATE ---------- */
   const [models, setModels] = useState<ModelData[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [defaultModelId, setDefaultModelId] = useState<string>("");
@@ -139,22 +144,18 @@ export default function ChatInterface() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [showCopyButton, setShowCopyButton] = useState(false);
 
-  // New State for Cursor Toggle (Default off)
   const [isCursorEnabled, setIsCursorEnabled] = useState(false);
 
   const isInitialState = messages.length === 0;
 
-  /* ---------- Refs ---------- */
-  // We use this ref to detect scroll position on the container
+  /* ---------- REFS ---------- */
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  // We use this ref to track if we SHOULD auto-scroll (without triggering re-renders)
   const shouldAutoScrollRef = useRef(true);
-  
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
 
-  /* ---------- Helpers ---------- */
+  /* ---------- HELPERS ---------- */
   const getChatMetadata = useCallback((): ChatMetadata[] => {
     try {
       return JSON.parse(localStorage.getItem("all_chats") || "[]");
@@ -199,14 +200,14 @@ export default function ChatInterface() {
     [chatId, getChatMetadata]
   );
 
-  /* ---------- Settings Logic ---------- */
+  /* ---------- SETTINGS ---------- */
   const toggleCursor = () => {
     const newState = !isCursorEnabled;
     setIsCursorEnabled(newState);
     localStorage.setItem("cursor_enabled", String(newState));
   };
 
-  /* ---------- Chat loading logic ---------- */
+  /* ---------- CHAT LOGIC ---------- */
   const loadChat = useCallback(
     (id: string) => {
       if (messages.length > 0 && chatId !== id && !isNewChat) {
@@ -217,7 +218,7 @@ export default function ChatInterface() {
       setChatId(id);
       setMessages([]);
       setInput("");
-      shouldAutoScrollRef.current = true; // Reset scroll on chat load
+      shouldAutoScrollRef.current = true;
 
       const saved = localStorage.getItem(`chat_${id}`);
       if (saved) {
@@ -248,7 +249,7 @@ export default function ChatInterface() {
     setLastAssistantMessage("");
     setShowCopyButton(false);
     setHasCodeBlock(false);
-    shouldAutoScrollRef.current = true; // Reset scroll on new chat
+    shouldAutoScrollRef.current = true;
     if (defaultModelId) setSelectedModelId(defaultModelId);
     setTimeout(() => inputRef.current?.focus(), 300);
   };
@@ -284,12 +285,11 @@ export default function ChatInterface() {
     setTimeout(() => setIsModelDropdownOpen(false), 150);
   };
 
-  /* ---------- Input change handler (auto–resize) ---------- */
+  /* ---------- INPUT HANDLERS ---------- */
   const handleInputTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget;
     setInput(el.value);
 
-    // Auto–resize logic
     el.style.height = "auto";
     const scrollHeight = el.scrollHeight;
     const minH = isInitialState ? 48 : 56;
@@ -297,7 +297,6 @@ export default function ChatInterface() {
     el.style.height = `${newHeight}px`;
   };
 
-  /* ---------- Keyboard helpers ---------- */
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -308,7 +307,7 @@ export default function ChatInterface() {
     if (e.key === "Shift") setIsShiftPressed(false);
   };
 
-  /* ---------- Global Shift key listeners ---------- */
+  /* ---------- EFFECTS ---------- */
   useEffect(() => {
     const handleShiftDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Shift") setIsShiftPressed(true);
@@ -326,7 +325,6 @@ export default function ChatInterface() {
     };
   }, []);
 
-  /* ---------- Input ref styling + focus handling ---------- */
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.resize = "none";
@@ -337,7 +335,6 @@ export default function ChatInterface() {
     }
   }, [isInitialState]);
 
-  /* ---------- Click–outside for dropdowns & menus ---------- */
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -357,7 +354,6 @@ export default function ChatInterface() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  /* ---------- Initial data load ---------- */
   useEffect(() => {
     setChatList(getChatMetadata());
 
@@ -388,31 +384,53 @@ export default function ChatInterface() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 1. Handler to detect if user is at bottom or has scrolled up
+  /* ---------- SCROLL LOGIC ---------- */
   const handleScroll = () => {
     if (!scrollContainerRef.current) return;
-    
+
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    // If the distance from bottom is less than 50px, we consider it "stuck" to bottom
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    const isAtBottom = distanceFromBottom <= 100;
     
+    // Increased threshold to 75px as requested
+    const isAtBottom = distanceFromBottom <= 75;
+
     shouldAutoScrollRef.current = isAtBottom;
   };
 
-  // 2. Effect to auto-scroll when messages change
   useEffect(() => {
     if (isInitialState || !scrollContainerRef.current) return;
 
-    if (shouldAutoScrollRef.current) {
-        // Smooth scroll to the exact bottom of the container
-        scrollContainerRef.current.scrollTo({
-            top: scrollContainerRef.current.scrollHeight,
-            behavior: "smooth",
-        });
+    // If we are not loading, just do a one-off smooth scroll if needed (e.g. initial load)
+    if (!isLoading && shouldAutoScrollRef.current) {
+       scrollContainerRef.current.scrollTo({
+          top: scrollContainerRef.current.scrollHeight,
+          behavior: "smooth",
+       });
     }
 
-    // Logic to show copy button (Misc UI update)
+    // If we ARE loading, we use requestAnimationFrame to smooth out the jitter
+    // caused by rapid state updates.
+    let animationFrameId: number;
+
+    const smoothScrollToBottom = () => {
+      if (shouldAutoScrollRef.current && scrollContainerRef.current) {
+        // We use "smooth" behavior here but driven by rAF loop to ensure
+        // it catches up gracefully without snapping back and forth.
+        scrollContainerRef.current.scrollTo({
+           top: scrollContainerRef.current.scrollHeight,
+           behavior: "smooth",
+        });
+      }
+      if (isLoading) {
+        animationFrameId = requestAnimationFrame(smoothScrollToBottom);
+      }
+    };
+
+    if (isLoading) {
+      animationFrameId = requestAnimationFrame(smoothScrollToBottom);
+    }
+
+    // Logic to show copy button
     const lastMsg = messages[messages.length - 1];
     if (lastMsg && lastMsg.role === "assistant" && lastMsg.content.length > 0) {
       setLastAssistantMessage(lastMsg.content);
@@ -426,9 +444,13 @@ export default function ChatInterface() {
         setHasCodeBlock(false);
       }
     }
+
+    return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    };
   }, [messages, isLoading, isInitialState]);
 
-  /* ---------- Submission logic ---------- */
+  /* ---------- SUBMIT ---------- */
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedModelId || !input.trim() || isLoading) return;
@@ -444,7 +466,6 @@ export default function ChatInterface() {
       content: userText,
     };
 
-    // User sent a message, force auto-scroll back on
     shouldAutoScrollRef.current = true;
 
     setMessages((prev) => [...prev, userMsg]);
@@ -458,8 +479,7 @@ export default function ChatInterface() {
       content: "",
     };
 
-    // Delay API call slightly to let layout animation begin
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     try {
       const response = await fetch("/api/chat", {
@@ -518,10 +538,9 @@ export default function ChatInterface() {
     }
   };
 
-  /* ---------- Misc ---------- */
   const currentModelName =
     models.find((m) => m.id === selectedModelId)?.id || "Select Model";
-  
+
   const inputGlowVariants: Variants = {
     initial: { opacity: 0, scale: 0.98 },
     focused: {
@@ -538,11 +557,8 @@ export default function ChatInterface() {
     unfocused: { opacity: 0, scale: 0.98, transition: { duration: 0.3 } },
   };
 
-  /* ---------- Render ---------- */
   return (
     <div className="flex h-screen bg-[#06060a] text-zinc-100 font-sans overflow-hidden selection:bg-zinc-700 selection:text-white">
-      
-      {/* Styles for Dark Scrollbars */}
       <style jsx global>{`
         ::-webkit-scrollbar {
           width: 8px;
@@ -571,7 +587,6 @@ export default function ChatInterface() {
         transition={spring}
         className="w-[260px] bg-[#09090b] border-r border-zinc-800/50 flex flex-col flex-shrink-0 select-none relative z-20"
       >
-        {/* New chat button */}
         <div className="p-3">
           <motion.button
             whileHover={{
@@ -587,7 +602,6 @@ export default function ChatInterface() {
           </motion.button>
         </div>
 
-        {/* History list */}
         <div
           ref={chatListRef}
           className="flex-1 overflow-y-auto px-3 py-2 space-y-1"
@@ -699,7 +713,6 @@ export default function ChatInterface() {
           </AnimatePresence>
         </div>
 
-        {/* User / Settings footer */}
         <div className="p-3 border-t border-zinc-800/50">
           <motion.button
             whileHover={{ backgroundColor: "#27272a", x: 2 }}
@@ -717,9 +730,8 @@ export default function ChatInterface() {
         </div>
       </motion.div>
 
-      {/* Main chat area wrapper - FLEX COL, H-FULL, NO SCROLL HERE */}
+      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col relative min-w-0 h-full overflow-hidden">
-        {/* Header */}
         <header className="flex-none sticky top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-30 bg-[#06060a]/90 backdrop-blur-md select-none border-b border-zinc-800/50">
           <div ref={modelDropdownRef} className="relative z-40">
             <motion.button
@@ -744,7 +756,6 @@ export default function ChatInterface() {
               </motion.div>
             </motion.button>
 
-            {/* Dropdown */}
             <AnimatePresence>
               {isModelDropdownOpen && (
                 <motion.div
@@ -822,36 +833,35 @@ export default function ChatInterface() {
           </div>
         </header>
 
-        {/* Dynamic Layout Container */}
         <LayoutGroup>
-          <div 
+          <div
             className={cn(
               "flex-1 flex flex-col relative z-10 transition-all duration-500 ease-in-out overflow-hidden",
-              isInitialState 
-                ? "justify-center items-center" // Centers input when empty
-                : "justify-end"                 // Pushes input to bottom when chat active
+              isInitialState
+                ? "justify-center items-center"
+                : "justify-end"
             )}
           >
             {/* Messages List */}
-            <div 
+            <div
               ref={scrollContainerRef}
               onScroll={handleScroll}
               className={cn(
-                "w-full overflow-y-auto scroll-smooth", 
-                isInitialState 
-                  ? "hidden h-0" // Completely hidden initially
-                  : "flex-1 min-h-0 pt-4 pb-4" // Standard chat behavior
+                "w-full overflow-y-auto", // Removed "scroll-smooth" to allow JS to handle smooth scrolling without conflict
+                isInitialState
+                  ? "hidden h-0"
+                  : "flex-1 min-h-0 pt-4 pb-4"
               )}
             >
               <div className="max-w-4xl mx-auto px-4">
                 <AnimatePresence initial={false}>
                   {messages.map((m) => (
-                    <MessageBubble
+                    <MemoizedMessageBubble
                       key={m.id}
                       {...m}
                       showCursor={
                         isLoading &&
-                        isCursorEnabled && 
+                        isCursorEnabled &&
                         m.id === messages[messages.length - 1]?.id &&
                         m.role === "assistant"
                       }
@@ -859,7 +869,6 @@ export default function ChatInterface() {
                   ))}
                 </AnimatePresence>
 
-                {/* Loading Indicators */}
                 {isLoading &&
                   messages.length > 0 &&
                   messages[messages.length - 1]?.role === "user" && (
@@ -875,8 +884,7 @@ export default function ChatInterface() {
                               repeat: Infinity,
                               repeatType: "reverse",
                             }}
-                          >
-                          </motion.span>
+                          />
                           <TypingCursor />
                         </div>
                       ) : (
@@ -887,12 +895,11 @@ export default function ChatInterface() {
                     </div>
                   )}
 
-                {/* Bottom spacer - no longer the primary scroll target */}
                 <div className="h-4" />
               </div>
             </div>
 
-            {/* Initial State Branding (Logo & Greeting) */}
+            {/* Initial State Branding */}
             <AnimatePresence>
               {isInitialState && (
                 <motion.div
@@ -911,19 +918,23 @@ export default function ChatInterface() {
               )}
             </AnimatePresence>
 
-            {/* Input Area Wrapper */}
-            <motion.div 
+            {/* Input Area */}
+            <motion.div
               layout
               transition={layoutSpring}
               className={cn(
                 "bg-[#06060a] select-none w-full z-20",
-                isInitialState 
-                  ? "p-4 max-w-3xl"                     // Centered styling
-                  : "p-6 pt-2 border-t border-zinc-800/50" // Bottom styling
+                isInitialState
+                  ? "p-4 max-w-3xl"
+                  : "p-6 pt-2 border-t border-zinc-800/50"
               )}
             >
-              <div className={cn("mx-auto relative group transition-all", isInitialState ? "max-w-3xl" : "max-w-4xl")}>
-                {/* Ambient glow */}
+              <div
+                className={cn(
+                  "mx-auto relative group transition-all",
+                  isInitialState ? "max-w-3xl" : "max-w-4xl"
+                )}
+              >
                 <motion.div
                   className="absolute inset-0 bg-zinc-500/20 rounded-[28px] blur-xl"
                   variants={inputGlowVariants}
@@ -946,7 +957,7 @@ export default function ChatInterface() {
                       : isInputFocused
                       ? "border-zinc-500/50 ring-2 ring-zinc-500/50"
                       : "border-zinc-700/50",
-                     isInitialState ? "min-h-[48px]" : "min-h-[56px]"
+                    isInitialState ? "min-h-[48px]" : "min-h-[56px]"
                   )}
                 >
                   <textarea
@@ -958,13 +969,17 @@ export default function ChatInterface() {
                     placeholder={
                       isLoading
                         ? "Generating response..."
-                        : isInitialState ? "How can I help you today?" : "Message..."
+                        : isInitialState
+                        ? "How can I help you today?"
+                        : "Message..."
                     }
                     rows={1}
                     wrap="off"
                     className={cn(
-                        "w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base focus:outline-none max-h-[200px] overflow-hidden leading-relaxed max-w-full transition-all",
-                        isInitialState ? "px-4 py-3 min-h-[48px]" : "px-5 py-4 min-h-[56px]"
+                      "w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base focus:outline-none max-h-[200px] overflow-hidden leading-relaxed max-w-full transition-all",
+                      isInitialState
+                        ? "px-4 py-3 min-h-[48px]"
+                        : "px-5 py-4 min-h-[56px]"
                     )}
                     style={{
                       resize: "none",
@@ -975,7 +990,12 @@ export default function ChatInterface() {
                     }}
                     disabled={isLoading}
                   />
-                  <div className={cn("flex justify-end items-center transition-all", isInitialState ? "px-2 pb-2 pt-0" : "px-3 pb-3 pt-1")}>
+                  <div
+                    className={cn(
+                      "flex justify-end items-center transition-all",
+                      isInitialState ? "px-2 pb-2 pt-0" : "px-3 pb-3 pt-1"
+                    )}
+                  >
                     <motion.button
                       type="submit"
                       disabled={isLoading || !input.trim()}
@@ -984,7 +1004,7 @@ export default function ChatInterface() {
                         input.trim()
                           ? "bg-zinc-100 text-zinc-900 hover:bg-white shadow-md shadow-zinc-500/30"
                           : "bg-zinc-700 text-zinc-500 cursor-not-allowed",
-                          isInitialState ? "mb-0" : "mb-0.5"
+                        isInitialState ? "mb-0" : "mb-0.5"
                       )}
                       whileTap={
                         !isLoading && input.trim()
@@ -1006,7 +1026,12 @@ export default function ChatInterface() {
                   </div>
                 </form>
 
-                <div className={cn("text-center transition-all", isInitialState ? "mt-4" : "mt-3")}>
+                <div
+                  className={cn(
+                    "text-center transition-all",
+                    isInitialState ? "mt-4" : "mt-3"
+                  )}
+                >
                   <p className="text-[11px] text-zinc-600">
                     AI can make mistakes. Please use responsibly.
                   </p>
@@ -1017,7 +1042,6 @@ export default function ChatInterface() {
         </LayoutGroup>
       </div>
 
-      {/* Settings modal */}
       <AnimatePresence>
         {isSettingsOpen && (
           <motion.div
