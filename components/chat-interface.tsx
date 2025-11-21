@@ -13,7 +13,6 @@ import {
   Send,
   Plus,
   ChevronDown,
-  Terminal,
   Loader2,
   User,
   Settings,
@@ -24,7 +23,13 @@ import {
   MoreVertical,
   Zap,
 } from "lucide-react";
-import { motion, AnimatePresence, type Transition, type Variants } from "framer-motion";
+import {
+  motion,
+  AnimatePresence,
+  type Transition,
+  type Variants,
+  LayoutGroup,
+} from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface Message {
@@ -44,12 +49,22 @@ interface ModelData {
 }
 
 /**
- * Global spring configuration – typed as `Transition` to satisfy Framer–Motion.
+ * Standard spring for small UI elements.
  */
 const spring: Transition = {
   type: "spring",
   stiffness: 400,
   damping: 20,
+};
+
+/**
+ * Slower, bouncier spring for layout shifts.
+ */
+const layoutSpring: Transition = {
+  type: "spring",
+  stiffness: 300,
+  damping: 30,
+  mass: 1.2,
 };
 
 /**
@@ -71,7 +86,7 @@ const TypingCursor = () => (
 );
 
 /**
- * New Bouncing Loader Component (3 dots).
+ * Bouncing Loader Component (3 dots).
  */
 const BouncingLoader = () => {
   const dotTransition = {
@@ -116,12 +131,17 @@ export default function ChatInterface() {
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [lastAssistantMessage, setLastAssistantMessage] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [hasCodeBlock, setHasCodeBlock] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [showCopyButton, setShowCopyButton] = useState(false);
 
   // New State for Cursor Toggle (Default off)
   const [isCursorEnabled, setIsCursorEnabled] = useState(false);
+
+  const isInitialState = messages.length === 0;
 
   /* ---------- Refs ---------- */
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -206,7 +226,7 @@ export default function ChatInterface() {
         setIsNewChat(true);
       }
 
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setTimeout(() => inputRef.current?.focus(), 300);
     },
     [messages, saveHistory, chatId, isNewChat]
   );
@@ -223,7 +243,7 @@ export default function ChatInterface() {
     setShowCopyButton(false);
     setHasCodeBlock(false);
     if (defaultModelId) setSelectedModelId(defaultModelId);
-    setTimeout(() => inputRef.current?.focus(), 50);
+    setTimeout(() => inputRef.current?.focus(), 300);
   };
 
   const deleteAllChats = () => {
@@ -265,7 +285,8 @@ export default function ChatInterface() {
     // Auto–resize logic
     el.style.height = "auto";
     const scrollHeight = el.scrollHeight;
-    const newHeight = Math.min(Math.max(scrollHeight, 56), 200);
+    const minH = isInitialState ? 48 : 56;
+    const newHeight = Math.min(Math.max(scrollHeight, minH), 200);
     el.style.height = `${newHeight}px`;
   };
 
@@ -302,12 +323,12 @@ export default function ChatInterface() {
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.resize = "none";
+      inputRef.current.style.height = isInitialState ? "48px" : "56px";
 
-      // Custom focus/blur handlers
       inputRef.current.onfocus = () => setIsInputFocused(true);
       inputRef.current.onblur = () => setIsInputFocused(false);
     }
-  }, []);
+  }, [isInitialState]);
 
   /* ---------- Click–outside for dropdowns & menus ---------- */
   useEffect(() => {
@@ -336,7 +357,6 @@ export default function ChatInterface() {
     const savedDefaultModel = localStorage.getItem("default_model") || "";
     setDefaultModelId(savedDefaultModel);
 
-    // Load cursor setting
     const savedCursorSetting = localStorage.getItem("cursor_enabled");
     if (savedCursorSetting === "true") {
       setIsCursorEnabled(true);
@@ -358,23 +378,26 @@ export default function ChatInterface() {
           if (!selectedModelId) setSelectedModelId(initialModel);
         }
       });
-  }, [selectedModelId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ---------- Scroll to bottom when messages change ---------- */
   useEffect(() => {
-    if (!messagesEndRef.current) return;
+    // Don't scroll if initial state or no ref
+    if (!messagesEndRef.current || isInitialState) return;
 
     const scrollBehavior = isLoading ? "instant" : "smooth";
-    messagesEndRef.current.scrollIntoView({ behavior: scrollBehavior });
+    
+    // Use a small timeout to ensure layout has updated before scrolling
+    setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: scrollBehavior });
+    }, 50);
 
-    // Update last assistant message for sticky copy button
     const lastMsg = messages[messages.length - 1];
     if (lastMsg && lastMsg.role === "assistant" && lastMsg.content.length > 0) {
       setLastAssistantMessage(lastMsg.content);
-      // Check if message contains code blocks
       const hasCode = /```[\s\S]*?```/.test(lastMsg.content);
       setHasCodeBlock(hasCode);
-      // Only show copy button when not loading (AI is finished) AND message has substantial content
       setShowCopyButton(!isLoading && lastMsg.content.length > 10);
     } else {
       setShowCopyButton(false);
@@ -383,7 +406,7 @@ export default function ChatInterface() {
         setHasCodeBlock(false);
       }
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isInitialState]);
 
   /* ---------- Submission logic ---------- */
   const onSubmit = async (e: FormEvent) => {
@@ -401,13 +424,9 @@ export default function ChatInterface() {
       content: userText,
     };
 
-    const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
+    setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
-
-    // NOTE: We do NOT add the AI placeholder immediately here.
-    // We wait until the first chunk arrives or the stream starts
-    // so that we can show the "Thinking" indicator (dots) in the meantime.
+    setIsNewChat(false);
 
     const aiMsgId = `${Date.now() + 1}`;
     const aiMsgPlaceholder: Message = {
@@ -416,14 +435,15 @@ export default function ChatInterface() {
       content: "",
     };
 
-    setIsNewChat(false);
+    // Delay API call slightly to let layout animation begin
+    await new Promise(resolve => setTimeout(resolve, 50));
 
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: newMessages.map((m) => ({
+          messages: [...messages, userMsg].map((m) => ({
             role: m.role,
             content: m.content,
           })),
@@ -447,14 +467,12 @@ export default function ChatInterface() {
         rawAccumulated += chunk;
 
         setMessages((prev) => {
-          // If the AI message doesn't exist in state yet, add it now (first chunk).
           if (!prev.some((m) => m.id === aiMsgId)) {
             return [
               ...prev,
               { id: aiMsgId, role: "assistant", content: rawAccumulated },
             ];
           }
-          // Otherwise, update existing message.
           return prev.map((m) =>
             m.id === aiMsgId ? { ...m, content: rawAccumulated } : m
           );
@@ -468,19 +486,19 @@ export default function ChatInterface() {
       saveHistory(finalHistory, true);
     } catch (err) {
       console.error("Chat error:", err);
-      // Cleanup: Remove failed message ID if it was added, or just the user message if we want strict rollback
       setMessages((prev) =>
         prev.filter((m) => m.id !== aiMsgId && m.id !== userMsg.id)
       );
     } finally {
       setIsLoading(false);
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
   };
 
   /* ---------- Misc ---------- */
   const currentModelName =
     models.find((m) => m.id === selectedModelId)?.id || "Select Model";
+  
   const inputGlowVariants: Variants = {
     initial: { opacity: 0, scale: 0.98 },
     focused: {
@@ -501,7 +519,7 @@ export default function ChatInterface() {
   return (
     <div className="flex h-screen bg-[#06060a] text-zinc-100 font-sans overflow-hidden selection:bg-zinc-700 selection:text-white">
       
-      {/* INJECTED STYLES FOR DARK SCROLLBARS */}
+      {/* Styles for Dark Scrollbars */}
       <style jsx global>{`
         ::-webkit-scrollbar {
           width: 8px;
@@ -511,13 +529,12 @@ export default function ChatInterface() {
           background: transparent;
         }
         ::-webkit-scrollbar-thumb {
-          background-color: #27272a; /* zinc-800 */
+          background-color: #27272a;
           border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-          background-color: #3f3f46; /* zinc-700 */
+          background-color: #3f3f46;
         }
-        /* Firefox support */
         * {
           scrollbar-width: thin;
           scrollbar-color: #27272a transparent;
@@ -529,10 +546,9 @@ export default function ChatInterface() {
         initial={{ x: -260 }}
         animate={{ x: 0 }}
         transition={spring}
-        className="w-[260px] bg-[#09090b] border-r border-zinc-800/50 flex flex-col flex-shrink-0 select-none"
-        style={{ flexShrink: 0, position: "relative" }}
+        className="w-[260px] bg-[#09090b] border-r border-zinc-800/50 flex flex-col flex-shrink-0 select-none relative z-20"
       >
-        {/* New chat button - UPDATED TO DARK THEME */}
+        {/* New chat button */}
         <div className="p-3">
           <motion.button
             whileHover={{
@@ -584,7 +600,6 @@ export default function ChatInterface() {
                   {chat.title}
                 </motion.button>
 
-                {/* Action icons */}
                 <div
                   className={cn(
                     "absolute right-2 top-1/2 -translate-y-1/2 transition-opacity duration-150 flex items-center gap-1 z-10",
@@ -596,7 +611,6 @@ export default function ChatInterface() {
                   )}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* Quick–delete icon */}
                   {isShiftPressed && chat.id !== chatId && (
                     <motion.button
                       initial={{ scale: 0.5, rotate: -45 }}
@@ -612,7 +626,6 @@ export default function ChatInterface() {
                     </motion.button>
                   )}
 
-                  {/* Context menu icon */}
                   <motion.button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -634,7 +647,6 @@ export default function ChatInterface() {
                   </motion.button>
                 </div>
 
-                {/* Context menu pop–up */}
                 <AnimatePresence>
                   {activeMenuId === chat.id && (
                     <motion.div
@@ -642,7 +654,7 @@ export default function ChatInterface() {
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.9, y: 5 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-2 top-full mt-1 w-32 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl text-left text-zinc-300 z-40"
+                      className="absolute right-2 top-full mt-1 w-32 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl text-left text-zinc-300 z-50"
                       style={{ transformOrigin: "top right" }}
                     >
                       <motion.button
@@ -682,11 +694,11 @@ export default function ChatInterface() {
         </div>
       </motion.div>
 
-      {/* Main chat area */}
-      <div className="flex-1 flex flex-col relative min-w-0">
-        {/* Header with model selector */}
-        <header className="sticky top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-20 bg-[#06060a]/90 backdrop-blur-md select-none border-b border-zinc-800/50">
-          <div ref={modelDropdownRef} className="relative z-30">
+      {/* Main chat area wrapper - FLEX COL, H-FULL, NO SCROLL HERE */}
+      <div className="flex-1 flex flex-col relative min-w-0 h-full overflow-hidden">
+        {/* Header */}
+        <header className="flex-none sticky top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-30 bg-[#06060a]/90 backdrop-blur-md select-none border-b border-zinc-800/50">
+          <div ref={modelDropdownRef} className="relative z-40">
             <motion.button
               whileTap={{ scale: 0.98 }}
               onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
@@ -780,7 +792,6 @@ export default function ChatInterface() {
             </AnimatePresence>
           </div>
 
-          {/* Current chat title */}
           <div className="text-sm text-zinc-500 hidden sm:block">
             {isNewChat
               ? "New Chat"
@@ -788,169 +799,175 @@ export default function ChatInterface() {
           </div>
         </header>
 
-        {/* Messages list */}
-        <div className="flex-1 overflow-y-auto scroll-smooth pt-14">
-          <div className="max-w-4xl mx-auto px-4 py-1">
-            {messages.length === 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 50 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, type: "tween" }}
-                className="flex flex-col items-center justify-center min-h-[40vh] text-center space-y-4 select-none"
-              >
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1, rotate: 360 }}
-                  transition={{ ...spring, delay: 0.2 }}
-                  className="w-16 h-16 rounded-3xl bg-zinc-800/50 flex items-center justify-center mb-6 shadow-2xl border border-zinc-700/70"
-                >
-                  <Terminal size={32} className="text-zinc-300" />
-                </motion.div>
-                <h2 className="text-2xl font-extrabold text-zinc-100 mb-2 tracking-wide">
-                  Hello! How can I help you today?
-                </h2>
-                <p className="text-zinc-500">{currentModelName}</p>
-              </motion.div>
+        <LayoutGroup>
+          <div 
+            className={cn(
+              "flex-1 flex flex-col relative z-10 transition-all duration-500 ease-in-out overflow-hidden",
+              isInitialState 
+                ? "justify-center items-center"
+                : "justify-end"
             )}
-
-            {/* Render messages */}
-            <AnimatePresence initial={false}>
-              {messages.map((m) => (
-                <MessageBubble
-                  key={m.id}
-                  {...m}
-                  showCursor={
-                    isLoading &&
-                    isCursorEnabled && // Only show if enabled in settings
-                    m.id === messages[messages.length - 1]?.id &&
-                    m.role === "assistant"
-                  }
-                />
-              ))}
-            </AnimatePresence>
-
-            {/* Thinking indicator (Visible only when waiting for first chunk) */}
-            {isLoading &&
-              messages.length > 0 &&
-              messages[messages.length - 1]?.role === "user" && (
-                <div className="flex justify-start w-full py-2">
-                  {isCursorEnabled ? (
-                    <div className="bg-zinc-1000 text-zinc-100 px-5 py-3 rounded-[24px] rounded-tl-sm shadow-lg text-[16px]">
-                      <motion.span
-                        className="text-zinc-500"
-                        initial={{ scale: 0.95 }}
-                        animate={{ scale: 1.05 }}
-                        transition={{
-                          duration: 1,
-                          repeat: Infinity,
-                          repeatType: "reverse",
-                        }}
-                      >
-                      </motion.span>
-                      <TypingCursor />
-                    </div>
-                  ) : (
-                    /* Bouncing Dots Loader (when cursor is OFF) - No bubble container */
-                    <div className="px-4 py-2">
-                      <BouncingLoader />
-                    </div>
-                  )}
-                </div>
-              )}
-
-            <div ref={messagesEndRef} className="h-4" />
-          </div>
-        </div>
-
-        {/* Input area */}
-        <div className="p-6 pt-2 bg-[#06060a] select-none border-t border-zinc-800/50">
-          <div className="max-w-4xl mx-auto relative group">
-            {/* Ambient glow */}
-            <motion.div
-              className="absolute inset-0 bg-zinc-500/20 rounded-[28px] blur-xl"
-              variants={inputGlowVariants}
-              initial="unfocused"
-              animate={
-                isLoading
-                  ? "focused"
-                  : isInputFocused
-                  ? "focused"
-                  : "unfocused"
-              }
-            />
-
-            <form
-              onSubmit={onSubmit}
+          >
+            <div 
               className={cn(
-                "relative flex flex-col bg-zinc-900 border rounded-[28px] shadow-2xl transition-all overflow-hidden",
-                isLoading
-                  ? "border-zinc-500/50 ring-2 ring-zinc-500/50 opacity-90"
-                  : isInputFocused
-                  ? "border-zinc-500/50 ring-2 ring-zinc-500/50"
-                  : "border-zinc-700/50"
+                "w-full overflow-y-auto scroll-smooth", 
+                isInitialState 
+                  ? "hidden h-0"
+                  : "flex-1 min-h-0 pt-4 pb-4"
               )}
             >
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={handleInputTextChange}
-                onKeyDown={handleKeyDown}
-                onKeyUp={handleKeyUp}
-                placeholder={
-                  isLoading
-                    ? "Generating response..."
-                    : "How can I help you today?"
-                }
-                rows={1}
-                wrap="off"
-                className="w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base px-5 py-4 focus:outline-none max-h-[200px] min-h-[56px] overflow-hidden leading-relaxed max-w-full"
-                style={{
-                  height: "56px",
-                  resize: "none",
-                  overflowX: "hidden",
-                  overflowY: "auto",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                }}
-                disabled={isLoading}
-              />
-              <div className="flex justify-end items-center px-3 pb-3 pt-1">
-                <motion.button
-                  type="submit"
-                  disabled={isLoading || !input.trim()}
-                  className={cn(
-                    "p-2 rounded-full mb-0.5 transition-all duration-200",
-                    input.trim()
-                      ? "bg-zinc-100 text-zinc-900 hover:bg-white shadow-md shadow-zinc-500/30"
-                      : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
-                  )}
-                  whileTap={
-                    !isLoading && input.trim()
-                      ? { scale: 0.85, rotate: 10 }
-                      : {}
-                  }
-                  transition={spring}
-                >
-                  {isLoading ? (
-                    <Loader2
-                      size={16}
-                      className="animate-spin"
-                      strokeWidth={2.5}
+              <div className="max-w-4xl mx-auto px-4">
+                <AnimatePresence initial={false}>
+                  {messages.map((m) => (
+                    <MessageBubble
+                      key={m.id}
+                      {...m}
+                      showCursor={
+                        isLoading &&
+                        isCursorEnabled && 
+                        m.id === messages[messages.length - 1]?.id &&
+                        m.role === "assistant"
+                      }
                     />
-                  ) : (
-                    <Send size={16} strokeWidth={2.5} />
-                  )}
-                </motion.button>
-              </div>
-            </form>
+                  ))}
+                </AnimatePresence>
 
-            <div className="text-center mt-3">
-              <p className="text-[11px] text-zinc-600">
-                AI can make mistakes. Please use responsibly.
-              </p>
+                {/* Loading Indicators */}
+                {isLoading &&
+                  messages.length > 0 &&
+                  messages[messages.length - 1]?.role === "user" && (
+                    <div className="flex justify-start w-full py-2">
+                      {isCursorEnabled ? (
+                        <div className="bg-zinc-1000 text-zinc-100 px-5 py-3 rounded-[24px] rounded-tl-sm shadow-lg text-[16px]">
+                          <motion.span
+                            className="text-zinc-500"
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: 1.05 }}
+                            transition={{
+                              duration: 1,
+                              repeat: Infinity,
+                              repeatType: "reverse",
+                            }}
+                          >
+                          </motion.span>
+                          <TypingCursor />
+                        </div>
+                      ) : (
+                        <div className="px-4 py-2">
+                          <BouncingLoader />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                <div ref={messagesEndRef} className="h-4" />
+              </div>
             </div>
+
+            {/* Input Area Wrapper - Animates via Framer Motion Layout */}
+            <motion.div 
+              layout
+              transition={layoutSpring}
+              className={cn(
+                "bg-[#06060a] select-none w-full z-20",
+                isInitialState 
+                  ? "p-4 max-w-3xl"                     // Centered styling
+                  : "p-6 pt-2 border-t border-zinc-800/50" // Bottom styling
+              )}
+            >
+              <div className={cn("mx-auto relative group transition-all", isInitialState ? "max-w-3xl" : "max-w-4xl")}>
+                {/* Ambient glow */}
+                <motion.div
+                  className="absolute inset-0 bg-zinc-500/20 rounded-[28px] blur-xl"
+                  variants={inputGlowVariants}
+                  initial="unfocused"
+                  animate={
+                    isLoading
+                      ? "focused"
+                      : isInputFocused
+                      ? "focused"
+                      : "unfocused"
+                  }
+                />
+
+                <form
+                  onSubmit={onSubmit}
+                  className={cn(
+                    "relative flex flex-col bg-zinc-900 border rounded-[28px] shadow-2xl transition-all overflow-hidden",
+                    isLoading
+                      ? "border-zinc-500/50 ring-2 ring-zinc-500/50 opacity-90"
+                      : isInputFocused
+                      ? "border-zinc-500/50 ring-2 ring-zinc-500/50"
+                      : "border-zinc-700/50",
+                     isInitialState ? "min-h-[48px]" : "min-h-[56px]"
+                  )}
+                >
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={handleInputTextChange}
+                    onKeyDown={handleKeyDown}
+                    onKeyUp={handleKeyUp}
+                    placeholder={
+                      isLoading
+                        ? "Generating response..."
+                        : isInitialState ? "How can I help you today?" : "Message..."
+                    }
+                    rows={1}
+                    wrap="off"
+                    className={cn(
+                        "w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base focus:outline-none max-h-[200px] overflow-hidden leading-relaxed max-w-full transition-all",
+                        isInitialState ? "px-4 py-3 min-h-[48px]" : "px-5 py-4 min-h-[56px]"
+                    )}
+                    style={{
+                      resize: "none",
+                      overflowX: "hidden",
+                      overflowY: "auto",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                    disabled={isLoading}
+                  />
+                  <div className={cn("flex justify-end items-center transition-all", isInitialState ? "px-2 pb-2 pt-0" : "px-3 pb-3 pt-1")}>
+                    <motion.button
+                      type="submit"
+                      disabled={isLoading || !input.trim()}
+                      className={cn(
+                        "p-2 rounded-full transition-all duration-200",
+                        input.trim()
+                          ? "bg-zinc-100 text-zinc-900 hover:bg-white shadow-md shadow-zinc-500/30"
+                          : "bg-zinc-700 text-zinc-500 cursor-not-allowed",
+                          isInitialState ? "mb-0" : "mb-0.5"
+                      )}
+                      whileTap={
+                        !isLoading && input.trim()
+                          ? { scale: 0.85, rotate: 10 }
+                          : {}
+                      }
+                      transition={spring}
+                    >
+                      {isLoading ? (
+                        <Loader2
+                          size={16}
+                          className="animate-spin"
+                          strokeWidth={2.5}
+                        />
+                      ) : (
+                        <Send size={16} strokeWidth={2.5} />
+                      )}
+                    </motion.button>
+                  </div>
+                </form>
+
+                <div className={cn("text-center transition-all", isInitialState ? "mt-4" : "mt-3")}>
+                  <p className="text-[11px] text-zinc-600">
+                    AI can make mistakes. Please use responsibly.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
           </div>
-        </div>
+        </LayoutGroup>
       </div>
 
       {/* Settings modal */}
@@ -969,7 +986,7 @@ export default function ChatInterface() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.8, y: -50 }}
               transition={spring}
-              className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl w-full max-w-md shadow-2xl select-none"
+              className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl w-full max-w-md shadow-2xl select-none relative z-60"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-6">
