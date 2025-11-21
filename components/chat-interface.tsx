@@ -145,7 +145,11 @@ export default function ChatInterface() {
   const isInitialState = messages.length === 0;
 
   /* ---------- Refs ---------- */
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // We use this ref to detect scroll position on the container
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // We use this ref to track if we SHOULD auto-scroll (without triggering re-renders)
+  const shouldAutoScrollRef = useRef(true);
+  
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
@@ -213,6 +217,7 @@ export default function ChatInterface() {
       setChatId(id);
       setMessages([]);
       setInput("");
+      shouldAutoScrollRef.current = true; // Reset scroll on chat load
 
       const saved = localStorage.getItem(`chat_${id}`);
       if (saved) {
@@ -243,6 +248,7 @@ export default function ChatInterface() {
     setLastAssistantMessage("");
     setShowCopyButton(false);
     setHasCodeBlock(false);
+    shouldAutoScrollRef.current = true; // Reset scroll on new chat
     if (defaultModelId) setSelectedModelId(defaultModelId);
     setTimeout(() => inputRef.current?.focus(), 300);
   };
@@ -382,18 +388,31 @@ export default function ChatInterface() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ---------- Scroll to bottom when messages change ---------- */
-  useEffect(() => {
-    // Don't scroll if initial state or no ref
-    if (!messagesEndRef.current || isInitialState) return;
-
-    const scrollBehavior = isLoading ? "instant" : "smooth";
+  // 1. Handler to detect if user is at bottom or has scrolled up
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
     
-    // Use a small timeout to ensure layout has updated before scrolling
-    setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: scrollBehavior });
-    }, 50);
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    // If the distance from bottom is less than 50px, we consider it "stuck" to bottom
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const isAtBottom = distanceFromBottom <= 100;
+    
+    shouldAutoScrollRef.current = isAtBottom;
+  };
 
+  // 2. Effect to auto-scroll when messages change
+  useEffect(() => {
+    if (isInitialState || !scrollContainerRef.current) return;
+
+    if (shouldAutoScrollRef.current) {
+        // Smooth scroll to the exact bottom of the container
+        scrollContainerRef.current.scrollTo({
+            top: scrollContainerRef.current.scrollHeight,
+            behavior: "smooth",
+        });
+    }
+
+    // Logic to show copy button (Misc UI update)
     const lastMsg = messages[messages.length - 1];
     if (lastMsg && lastMsg.role === "assistant" && lastMsg.content.length > 0) {
       setLastAssistantMessage(lastMsg.content);
@@ -424,6 +443,9 @@ export default function ChatInterface() {
       role: "user",
       content: userText,
     };
+
+    // User sent a message, force auto-scroll back on
+    shouldAutoScrollRef.current = true;
 
     setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
@@ -800,21 +822,25 @@ export default function ChatInterface() {
           </div>
         </header>
 
+        {/* Dynamic Layout Container */}
         <LayoutGroup>
           <div 
             className={cn(
               "flex-1 flex flex-col relative z-10 transition-all duration-500 ease-in-out overflow-hidden",
               isInitialState 
-                ? "justify-center items-center"
-                : "justify-end"
+                ? "justify-center items-center" // Centers input when empty
+                : "justify-end"                 // Pushes input to bottom when chat active
             )}
           >
+            {/* Messages List */}
             <div 
+              ref={scrollContainerRef}
+              onScroll={handleScroll}
               className={cn(
                 "w-full overflow-y-auto scroll-smooth", 
                 isInitialState 
-                  ? "hidden h-0"
-                  : "flex-1 min-h-0 pt-4 pb-4"
+                  ? "hidden h-0" // Completely hidden initially
+                  : "flex-1 min-h-0 pt-4 pb-4" // Standard chat behavior
               )}
             >
               <div className="max-w-4xl mx-auto px-4">
@@ -861,10 +887,12 @@ export default function ChatInterface() {
                     </div>
                   )}
 
-                <div ref={messagesEndRef} className="h-4" />
+                {/* Bottom spacer - no longer the primary scroll target */}
+                <div className="h-4" />
               </div>
             </div>
 
+            {/* Initial State Branding (Logo & Greeting) */}
             <AnimatePresence>
               {isInitialState && (
                 <motion.div
@@ -877,7 +905,7 @@ export default function ChatInterface() {
                     <Terminal size={32} className="text-zinc-100" />
                   </div>
                   <h2 className="text-2xl font-semibold text-zinc-100">
-                    Hello! How can I help you today?
+                    Hello! How can I help you?
                   </h2>
                 </motion.div>
               )}
@@ -890,8 +918,8 @@ export default function ChatInterface() {
               className={cn(
                 "bg-[#06060a] select-none w-full z-20",
                 isInitialState 
-                  ? "p-4 max-w-3xl"
-                  : "p-6 pt-2 border-t border-zinc-800/50"
+                  ? "p-4 max-w-3xl"                     // Centered styling
+                  : "p-6 pt-2 border-t border-zinc-800/50" // Bottom styling
               )}
             >
               <div className={cn("mx-auto relative group transition-all", isInitialState ? "max-w-3xl" : "max-w-4xl")}>
