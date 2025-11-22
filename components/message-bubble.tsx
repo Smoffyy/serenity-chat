@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, Children } from "react"; // ADDED Children import
+import React, { useState, useEffect, useRef, Children } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -150,7 +150,13 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkBreaks]}
                 rehypePlugins={[rehypeHighlight]}
-                // REMOVED P OVERRIDE HERE TO ALLOW BLOCK ELEMENTS TO RENDER CORRECTLY
+                components={{
+                  p: ({ children }) => (
+                    <p className="mb-2 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
+                      {children}
+                    </p>
+                  ),
+                }}
               >
                 {content}
               </ReactMarkdown>
@@ -174,7 +180,13 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
               <div className="p-3 text-xs text-zinc-500 font-mono leading-relaxed min-h-full flex flex-col justify-end">
                  <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkBreaks]}
-                    // REMOVED P OVERRIDE HERE TO ALLOW BLOCK ELEMENTS TO RENDER CORRECTLY
+                    components={{
+                      p: ({ children }) => (
+                        <p className="mb-2 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
+                          {children}
+                        </p>
+                      ),
+                    }}
                  >
                     {content}
                  </ReactMarkdown>
@@ -245,13 +257,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
         rehypePlugins={[rehypeHighlight, rehypeKatex]}
         components={{
-          // FIX: REMOVED P OVERRIDE TO FIX NESTING/HYDRATION ERRORS. 
-          // Tailwind prose handles default spacing for block elements.
-          // p: ({ children }) => (
-          //   <p className="mb-3 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
-          //     {children}
-          //   </p>
-          // ),
+          p: ({ children }) => (
+            <p className="mb-3 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
+              {children}
+            </p>
+          ),
           ul: ({ children }) => (
             <ul className="list-disc list-outside space-y-1 mb-4 pl-5">{children}</ul>
           ),
