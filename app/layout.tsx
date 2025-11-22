@@ -1,16 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Serenity Chat",
@@ -25,7 +15,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className="antialiased"
+        style={{
+          // Manually define the CSS variables that were previously set by the Google Font module.
+          // This ensures Tailwind and all components that reference these variables use local system fonts.
+          // Using system-ui ensures the font matches the user's OS look and feel (e.g., San Francisco on macOS, Segoe UI on Windows).
+          "--font-geist-sans": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+          "--font-geist-mono": "Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+          fontFamily: "var(--font-geist-sans)",
+        } as React.CSSProperties}
       >
         {children}
       </body>
