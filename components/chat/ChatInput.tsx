@@ -4,7 +4,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Send, Loader2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { spring, inputGlowVariants, layoutSpring } from "./animations";
+import { inputGlowVariants } from "./animations";
 
 interface ChatInputProps {
   input: string;
@@ -18,6 +18,7 @@ interface ChatInputProps {
   onBlur: () => void;
   onSubmit: (e: React.FormEvent) => void;
   inputRef: React.RefObject<HTMLTextAreaElement>;
+  animationsEnabled: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -32,29 +33,31 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onBlur,
   onSubmit,
   inputRef,
+  animationsEnabled,
 }) => {
   return (
     <motion.div
-      layout
-      transition={layoutSpring}
+      // Conditionally apply layout animation
+      layout={animationsEnabled}
       className={cn(
-        "bg-[#06060a] select-none w-full z-20",
+        "bg-[var(--bg-primary)] select-none w-full z-20",
         isInitialState
           ? "absolute inset-0 flex flex-col items-center justify-center p-4"
-          : "flex-none p-6 pt-2 border-t border-zinc-800/50"
+          : "flex-none p-6 pt-2 border-t border-[var(--border-color)]"
       )}
     >
       {isInitialState && (
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          // Conditionally apply initial state animation
+          initial={animationsEnabled ? { opacity: 0, y: 20 } : false}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20, transition: { duration: 0.3 } }}
+          exit={animationsEnabled ? { opacity: 0, y: -20 } : false}
           className="flex flex-col items-center justify-center mb-8"
         >
-          <div className="w-16 h-16 rounded-3xl bg-zinc-800/50 flex items-center justify-center mb-4 shadow-2xl border border-zinc-700/70 backdrop-blur-sm">
-            <Terminal size={32} className="text-zinc-100" />
+          <div className="w-16 h-16 rounded-3xl bg-[var(--bg-secondary)] flex items-center justify-center mb-4 shadow-2xl border border-[var(--border-color)] backdrop-blur-sm">
+            <Terminal size={32} className="text-[var(--text-primary)]" />
           </div>
-          <h2 className="text-2xl font-semibold text-zinc-100">
+          <h2 className="text-2xl font-semibold text-[var(--text-primary)]">
             Hello! How can I help you?
           </h2>
         </motion.div>
@@ -66,24 +69,27 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           isInitialState ? "max-w-3xl w-full" : "max-w-4xl"
         )}
       >
-        <motion.div
-          className="absolute inset-0 bg-zinc-500/20 rounded-[28px] blur-xl"
-          variants={inputGlowVariants}
-          initial="unfocused"
-          animate={
-            isLoading ? "focused" : isInputFocused ? "focused" : "unfocused"
-          }
-        />
+        {/* Conditionally render glow effect based on animationsEnabled */}
+        {animationsEnabled && (
+          <motion.div
+            className="absolute inset-0 bg-[var(--accent-color)]/20 rounded-[28px] blur-xl"
+            variants={inputGlowVariants}
+            initial="unfocused"
+            animate={
+              isLoading ? "focused" : isInputFocused ? "focused" : "unfocused"
+            }
+          />
+        )}
 
         <form
           onSubmit={onSubmit}
           className={cn(
-            "relative flex flex-col bg-zinc-900 border rounded-[28px] shadow-2xl transition-all overflow-hidden",
+            "relative flex flex-col bg-[var(--input-bg)] border rounded-[28px] shadow-2xl transition-all overflow-hidden",
             isLoading
-              ? "border-zinc-500/50 ring-2 ring-zinc-500/50 opacity-90"
+              ? "border-[var(--accent-color)]/50 ring-2 ring-[var(--accent-color)]/50 opacity-90"
               : isInputFocused
-              ? "border-zinc-500/50 ring-2 ring-zinc-500/50"
-              : "border-zinc-700/50",
+              ? "border-[var(--accent-color)]/50 ring-2 ring-[var(--accent-color)]/50"
+              : "border-[var(--border-color)]",
             isInitialState ? "min-h-[48px]" : "min-h-[56px]"
           )}
         >
@@ -106,7 +112,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             wrap="off"
             disabled={isLoading}
             className={cn(
-              "w-full bg-transparent text-zinc-100 placeholder:text-zinc-500 text-base focus:outline-none max-h-[200px] overflow-hidden leading-relaxed max-w-full transition-all",
+              "w-full bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] text-base focus:outline-none max-h-[200px] overflow-hidden leading-relaxed max-w-full transition-all",
               isInitialState
                 ? "px-4 py-3 min-h-[48px]"
                 : "px-5 py-4 min-h-[56px]"
@@ -131,21 +137,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               className={cn(
                 "p-2 rounded-full transition-all duration-200",
                 input.trim()
-                  ? "bg-zinc-100 text-zinc-900 hover:bg-white shadow-md shadow-zinc-500/30"
-                  : "bg-zinc-700 text-zinc-500 cursor-not-allowed",
+                  ? "bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/90 shadow-md"
+                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] cursor-not-allowed",
                 isInitialState ? "mb-0" : "mb-0.5"
               )}
+              // Conditionally apply submit button animation
               whileTap={
-                !isLoading && input.trim()
+                animationsEnabled && !isLoading && input.trim()
                   ? { scale: 0.85, rotate: 10 }
-                  : {}
+                  : undefined
               }
-              transition={spring}
             >
               {isLoading ? (
                 <Loader2
                   size={16}
-                  className="animate-spin"
+                  className={animationsEnabled ? "animate-spin" : ""}
                   strokeWidth={2.5}
                 />
               ) : (
@@ -161,7 +167,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             isInitialState ? "mt-4" : "mt-3"
           )}
         >
-          <p className="text-[11px] text-zinc-600">
+          <p className="text-[11px] text-[var(--text-secondary)]">
             Always fact check important information.
           </p>
         </div>

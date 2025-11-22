@@ -9,8 +9,9 @@ import React, {
   useCallback,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { motion, MotionConfig } from "framer-motion";
 
-import type { Message, ChatMetadata, ModelData } from "./types";
+import type { Message, ChatMetadata, ModelData, AppSettings, Theme } from "./types";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { ChatMessages } from "./ChatMessages";
@@ -18,6 +19,46 @@ import { ChatInput } from "./ChatInput";
 import { SettingsModal } from "./SettingsModal";
 import { useChatHistory } from "./hooks/useChatHistory";
 import { useChatSubmit } from "./hooks/useChatSubmit";
+import { getTransition } from "./animations";
+
+// Define theme colors using CSS variables
+const themeDefinitions: Record<Theme, Record<string, string>> = {
+  dark: {
+    "--bg-primary": "#06060a",
+    "--bg-secondary": "#09090b",
+    "--bg-tertiary": "#27272a",
+    "--text-primary": "#f4f4f5",
+    "--text-secondary": "#a1a1aa",
+    "--border-color": "#27272a80",
+    // REVERTED: Changed back to white as requested
+    "--accent-color": "#ffffff", 
+    "--input-bg": "#18181b",
+    "--user-msg-bg": "#2f2f2f",
+  },
+  light: {
+    "--bg-primary": "#ffffff",
+    "--bg-secondary": "#f4f4f5",
+    "--bg-tertiary": "#e4e4e7",
+    "--text-primary": "#18181b",
+    "--text-secondary": "#71717a",
+    "--border-color": "#e4e4e7",
+    // Black accent for light mode visibility
+    "--accent-color": "#18181b", 
+    "--input-bg": "#ffffff",
+    "--user-msg-bg": "#f4f4f5",
+  },
+  chatgpt: {
+    "--bg-primary": "#343541", 
+    "--bg-secondary": "#202123", 
+    "--bg-tertiary": "#40414f", 
+    "--text-primary": "#ececf1",
+    "--text-secondary": "#c5c5d2",
+    "--border-color": "#4d4d4f80",
+    "--accent-color": "#10a37f", // ChatGPT Green
+    "--input-bg": "#40414f",
+    "--user-msg-bg": "#343541", 
+  },
+};
 
 export default function ChatInterface() {
   /* ---------- ROUTER & PARAMS ---------- */
@@ -29,7 +70,7 @@ export default function ChatInterface() {
   const [models, setModels] = useState<ModelData[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [defaultModelId, setDefaultModelId] = useState<string>("");
-  
+
   const [chatId, setChatId] = useState<string>("");
   const chatIdRef = useRef<string>("");
 
@@ -38,16 +79,23 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [generatingChatId, setGeneratingChatId] = useState<string | null>(null);
   const [chatList, setChatList] = useState<ChatMetadata[]>([]);
-  
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isNewChat, setIsNewChat] = useState(true);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [isCursorEnabled, setIsCursorEnabled] = useState(false);
+
+  // Settings State
+  const [settings, setSettings] = useState<AppSettings>({
+    theme: "dark",
+    animationsEnabled: true,
+    animationSpeed: 1.0,
+  });
 
   const isInitialState = messages.length === 0;
+  const currentTransition = getTransition(settings.animationsEnabled, settings.animationSpeed);
 
   /* ---------- REFS ---------- */
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -56,12 +104,24 @@ export default function ChatInterface() {
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
 
+  /* ---------- THEME APPLICATION ---------- */
+  useEffect(() => {
+    const root = document.documentElement;
+    const themeColors = themeDefinitions[settings.theme];
+    for (const [key, value] of Object.entries(themeColors)) {
+      root.style.setProperty(key, value);
+    }
+    // Set base styles on body to prevent flashes
+    document.body.style.backgroundColor = themeColors["--bg-primary"];
+    document.body.style.color = themeColors["--text-primary"];
+  }, [settings.theme]);
+
   /* ---------- SYNC WITH URL ---------- */
   useEffect(() => {
     if (urlChatId) {
       setChatId(urlChatId);
       chatIdRef.current = urlChatId;
-      
+
       shouldAutoScrollRef.current = true;
 
       const saved = localStorage.getItem(`chat_${urlChatId}`);
@@ -92,8 +152,10 @@ export default function ChatInterface() {
   }, [urlChatId, router]);
 
   /* ---------- HOOKS ---------- */
-  // FIXED: Pass selectedModelId to useChatHistory
-  const { getChatMetadata, saveHistory: saveHistoryBase } = useChatHistory(chatId, selectedModelId);
+  const { getChatMetadata, saveHistory: saveHistoryBase } = useChatHistory(
+    chatId,
+    selectedModelId
+  );
 
   const { onSubmit: submitChat } = useChatSubmit({
     selectedModelId,
@@ -109,12 +171,14 @@ export default function ChatInterface() {
     chatIdRef,
   });
 
-  /* ---------- SETTINGS ---------- */
-  const toggleCursor = () => {
-    const newState = !isCursorEnabled;
-    setIsCursorEnabled(newState);
-    localStorage.setItem("cursor_enabled", String(newState));
-  };
+  /* ---------- SETTINGS HANDLERS ---------- */
+  const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
+    setSettings((prev) => {
+      const updated = { ...prev, ...newSettings };
+      localStorage.setItem("app_settings", JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
 
   /* ---------- CHAT LOGIC ---------- */
   const loadChat = useCallback(
@@ -143,10 +207,9 @@ export default function ChatInterface() {
     setInput("");
     setIsNewChat(true);
     shouldAutoScrollRef.current = true;
-    
+
     if (defaultModelId) setSelectedModelId(defaultModelId);
-    
-    // Create a placeholder chat in the list immediately
+
     const newChat: ChatMetadata = {
       id: newChatId,
       title: "New Chat",
@@ -155,49 +218,39 @@ export default function ChatInterface() {
     const updatedList = [newChat, ...(chatList || [])];
     setChatList(updatedList);
     localStorage.setItem("all_chats", JSON.stringify(updatedList));
-    
+
     router.push(`?chat=${newChatId}`);
     setTimeout(() => inputRef.current?.focus(), 300);
   }, [messages, isNewChat, saveHistoryBase, defaultModelId, router, chatList]);
 
   const deleteAllChats = useCallback(() => {
-    // 1. Delete all chat content from localStorage
     chatList.forEach((c) => localStorage.removeItem(`chat_${c.id}`));
 
-    // 2. Prepare the new chat ID
     const newChatId = Date.now().toString();
-
-    // 3. Create the metadata for the *single* new chat placeholder
     const newChat: ChatMetadata = {
       id: newChatId,
       title: "New Chat",
       date: Date.now(),
     };
 
-    // 4. Update localStorage and state with ONLY the new chat
-    // This ensures a clean slate and that only the placeholder exists
     localStorage.setItem("all_chats", JSON.stringify([newChat]));
     setChatList([newChat]);
-    
-    // 5. Clear current chat state and set new ID
+
     setActiveMenuId(null);
     setMessages([]);
     setInput("");
     setIsNewChat(true);
     shouldAutoScrollRef.current = true;
-    
+
     setChatId(newChatId);
     chatIdRef.current = newChatId;
-    
+
     if (defaultModelId) setSelectedModelId(defaultModelId);
-    
-    // 6. Force navigation to the new chat ID, triggering re-render/useEffect
+
     router.push(`?chat=${newChatId}`);
-    
-    // 7. Close the settings modal and focus input
     setIsSettingsOpen(false);
     setTimeout(() => inputRef.current?.focus(), 300);
-}, [chatList, router, defaultModelId]);
+  }, [chatList, router, defaultModelId]);
 
   const deleteChat = useCallback(
     (e: React.MouseEvent, id: string) => {
@@ -310,9 +363,15 @@ export default function ChatInterface() {
     const savedDefaultModel = localStorage.getItem("default_model") || "";
     setDefaultModelId(savedDefaultModel);
 
-    const savedCursorSetting = localStorage.getItem("cursor_enabled");
-    if (savedCursorSetting === "true") {
-      setIsCursorEnabled(true);
+    // Load Settings
+    const savedSettingsStr = localStorage.getItem("app_settings");
+    if (savedSettingsStr) {
+      try {
+        const savedSettings = JSON.parse(savedSettingsStr);
+        setSettings((prev) => ({ ...prev, ...savedSettings }));
+      } catch (e) {
+        console.error("Failed to parse saved settings", e);
+      }
     }
 
     fetch("/api/models")
@@ -326,11 +385,11 @@ export default function ChatInterface() {
             data.data.some((m: ModelData) => m.id === savedDefaultModel)
           )
             initialModel = savedDefaultModel;
-          
+
           setSelectedModelId((prev) => prev || initialModel);
         }
       })
-      .catch(err => console.error("Failed to fetch models", err));
+      .catch((err) => console.error("Failed to fetch models", err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -349,12 +408,14 @@ export default function ChatInterface() {
     if (isInitialState || !scrollContainerRef.current) return;
 
     if (shouldAutoScrollRef.current) {
+      // Only animate scroll if animations are enabled
+      const behavior = isLoading && settings.animationsEnabled ? "smooth" : "auto";
       scrollContainerRef.current.scrollTo({
         top: scrollContainerRef.current.scrollHeight,
-        behavior: isLoading ? "smooth" : "auto",
+        behavior: behavior,
       });
     }
-  }, [messages, isLoading, isInitialState]);
+  }, [messages, isLoading, isInitialState, settings.animationsEnabled]);
 
   /* ---------- AUTO FOCUS AFTER RESPONSE ---------- */
   useEffect(() => {
@@ -378,7 +439,6 @@ export default function ChatInterface() {
       setIsNewChat(false);
       setGeneratingChatId(chatId);
 
-      // Create a placeholder chat immediately if this is the first message
       if (messages.length === 0) {
         const newChat: ChatMetadata = {
           id: chatId,
@@ -397,7 +457,10 @@ export default function ChatInterface() {
   );
 
   return (
-    <div className="flex h-screen bg-[#06060a] text-zinc-100 font-sans overflow-hidden selection:bg-zinc-700 selection:text-white">
+    <div className="flex h-screen font-sans overflow-hidden selection:bg-zinc-700 selection:text-white" style={{
+        backgroundColor: 'var(--bg-primary)',
+        color: 'var(--text-primary)'
+    }}>
       <style jsx global>{`
         ::-webkit-scrollbar {
           width: 8px;
@@ -407,76 +470,83 @@ export default function ChatInterface() {
           background: transparent;
         }
         ::-webkit-scrollbar-thumb {
-          background-color: #27272a;
+          background-color: var(--bg-tertiary);
           border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-          background-color: #3f3f46;
+          background-color: var(--border-color);
         }
         * {
           scrollbar-width: thin;
-          scrollbar-color: #27272a transparent;
+          scrollbar-color: var(--bg-tertiary) transparent;
         }
       `}</style>
 
-      <Sidebar
-        chatList={chatList}
-        chatId={chatId}
-        isShiftPressed={isShiftPressed}
-        activeMenuId={activeMenuId}
-        onNewChat={startNewChat}
-        onLoadChat={loadChat}
-        onDeleteChat={deleteChat}
-        onSettingsOpen={() => setIsSettingsOpen(true)}
-        setActiveMenuId={setActiveMenuId}
-      />
-
-      <div className="flex-1 flex flex-col relative min-w-0 h-full overflow-hidden">
-        <Header
-          models={models}
-          selectedModelId={selectedModelId}
-          defaultModelId={defaultModelId}
-          isModelDropdownOpen={isModelDropdownOpen}
+      {/* Provide global motion config based on settings */}
+      <MotionConfig transition={currentTransition}>
+        <Sidebar
           chatList={chatList}
           chatId={chatId}
-          isNewChat={isNewChat}
-          onModelSelect={handleModelSelect}
-          onSetDefaultModel={handleSetDefaultModel}
-          onDropdownToggle={setIsModelDropdownOpen}
-          modelDropdownRef={modelDropdownRef}
+          isShiftPressed={isShiftPressed}
+          activeMenuId={activeMenuId}
+          onNewChat={startNewChat}
+          onLoadChat={loadChat}
+          onDeleteChat={deleteChat}
+          onSettingsOpen={() => setIsSettingsOpen(true)}
+          setActiveMenuId={setActiveMenuId}
+          animationsEnabled={settings.animationsEnabled}
         />
 
-        <ChatMessages
-          messages={messages}
-          isLoading={isLoading}
-          isCursorEnabled={isCursorEnabled}
-          isInitialState={isInitialState}
-          scrollContainerRef={scrollContainerRef}
-          onScroll={handleScroll}
-        />
+        <div className="flex-1 flex flex-col relative min-w-0 h-full overflow-hidden">
+          <Header
+            models={models}
+            selectedModelId={selectedModelId}
+            defaultModelId={defaultModelId}
+            isModelDropdownOpen={isModelDropdownOpen}
+            chatList={chatList}
+            chatId={chatId}
+            isNewChat={isNewChat}
+            onModelSelect={handleModelSelect}
+            onSetDefaultModel={handleSetDefaultModel}
+            onDropdownToggle={setIsModelDropdownOpen}
+            modelDropdownRef={modelDropdownRef}
+            animationsEnabled={settings.animationsEnabled}
+          />
 
-        <ChatInput
-          input={input}
-          isLoading={isLoading}
-          isInitialState={isInitialState}
-          isInputFocused={isInputFocused}
-          onInputChange={handleInputTextChange}
-          onKeyDown={handleKeyDown}
-          onKeyUp={handleKeyUp}
-          onFocus={() => setIsInputFocused(true)}
-          onBlur={() => setIsInputFocused(false)}
-          onSubmit={handleSubmit}
-          inputRef={inputRef}
-        />
-      </div>
+          <ChatMessages
+            messages={messages}
+            isLoading={isLoading}
+            isInitialState={isInitialState}
+            scrollContainerRef={scrollContainerRef}
+            onScroll={handleScroll}
+            animationsEnabled={settings.animationsEnabled}
+          />
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        isCursorEnabled={isCursorEnabled}
-        onClose={() => setIsSettingsOpen(false)}
-        onToggleCursor={toggleCursor}
-        onDeleteAllChats={deleteAllChats}
-      />
+          <ChatInput
+            input={input}
+            isLoading={isLoading}
+            isInitialState={isInitialState}
+            isInputFocused={isInputFocused}
+            onInputChange={handleInputTextChange}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
+            onFocus={() => setIsInputFocused(true)}
+            onBlur={() => setIsInputFocused(false)}
+            onSubmit={handleSubmit}
+            inputRef={inputRef}
+            animationsEnabled={settings.animationsEnabled}
+          />
+        </div>
+
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          settings={settings}
+          onClose={() => setIsSettingsOpen(false)}
+          onUpdateSettings={updateSettings}
+          onDeleteAllChats={deleteAllChats}
+          transition={currentTransition}
+        />
+      </MotionConfig>
     </div>
   );
 }

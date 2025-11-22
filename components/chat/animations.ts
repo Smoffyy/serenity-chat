@@ -1,9 +1,24 @@
 import type { Transition, Variants } from "framer-motion";
 
-export const spring: Transition = {
-  type: "spring",
-  stiffness: 400,
-  damping: 20,
+// Helper to determine effective transition based on enabled state and speed
+export const getTransition = (enabled: boolean, speed: number): Transition => {
+  if (!enabled) {
+    return { duration: 0 };
+  }
+
+  // Base values (speed = 1)
+  const baseStiffness = 400;
+  const baseDamping = 30;
+
+  // Adjust based on speed factor (higher speed = higher stiffness, lower damping)
+  // Limiting speed influence to avoid breaking physics
+  const effectiveSpeed = Math.max(0.5, Math.min(speed, 2));
+
+  return {
+    type: "spring",
+    stiffness: baseStiffness * effectiveSpeed,
+    damping: baseDamping / effectiveSpeed,
+  };
 };
 
 export const layoutSpring: Transition = {

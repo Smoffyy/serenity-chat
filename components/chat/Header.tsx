@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Zap, ChevronDown, Star, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ModelData, ChatMetadata } from "./types";
-import { spring } from "./animations";
 
 interface HeaderProps {
   models: ModelData[];
@@ -19,6 +18,7 @@ interface HeaderProps {
   onSetDefaultModel: (e: React.MouseEvent, modelId: string) => void;
   onDropdownToggle: (open: boolean) => void;
   modelDropdownRef: React.RefObject<HTMLDivElement>;
+  animationsEnabled: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,28 +33,35 @@ export const Header: React.FC<HeaderProps> = ({
   onSetDefaultModel,
   onDropdownToggle,
   modelDropdownRef,
+  animationsEnabled,
 }) => {
   const currentModelName =
     models.find((m) => m.id === selectedModelId)?.id || "Select Model";
 
   return (
-    <header className="flex-none sticky top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-30 bg-[#06060a]/90 backdrop-blur-md select-none border-b border-zinc-800/50">
+    // Using CSS variables for background and border
+    <header className="flex-none sticky top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-30 bg-[var(--bg-primary)]/90 backdrop-blur-md select-none border-b border-[var(--border-color)]">
       <div ref={modelDropdownRef} className="relative z-40">
         <motion.button
-          whileTap={{ scale: 0.98 }}
+          // Conditionally apply tap animation
+          whileTap={animationsEnabled ? { scale: 0.98 } : undefined}
           onClick={() => onDropdownToggle(!isModelDropdownOpen)}
           className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 shadow-xl",
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 shadow-sm",
             isModelDropdownOpen
-              ? "bg-zinc-700 text-white ring-2 ring-zinc-500/50"
-              : "bg-zinc-900 border border-zinc-700/50 text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600"
+              ? "bg-[var(--accent-color)] text-[var(--bg-primary)] ring-2 ring-[var(--accent-color)]/50"
+              : "bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
           )}
         >
-          <Zap size={14} className="text-zinc-300" />
+          <Zap 
+            size={14} 
+            className={isModelDropdownOpen ? "text-[var(--bg-primary)]" : "text-[var(--text-secondary)]"} 
+          />
           <span className="truncate max-w-[150px]">{currentModelName}</span>
           <motion.div
-            animate={{ rotate: isModelDropdownOpen ? 180 : 0 }}
-            transition={spring}
+             // Conditionally apply rotation animation
+            animate={animationsEnabled ? { rotate: isModelDropdownOpen ? 180 : 0 } : undefined}
+            style={{ rotate: !animationsEnabled && isModelDropdownOpen ? 180 : 0 }}
           >
             <ChevronDown size={14} />
           </motion.div>
@@ -63,31 +70,32 @@ export const Header: React.FC<HeaderProps> = ({
         <AnimatePresence>
           {isModelDropdownOpen && (
             <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              // Conditionally apply dropdown entry/exit animations
+              initial={animationsEnabled ? { opacity: 0, y: 10, scale: 0.95 } : false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              transition={spring}
+              exit={animationsEnabled ? { opacity: 0, y: 10, scale: 0.95 } : false}
               style={{ transformOrigin: "top left" }}
-              className="absolute left-0 mt-2 w-72 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-1 max-h-80 overflow-y-auto"
+              className="absolute left-0 mt-2 w-72 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl shadow-2xl p-1 max-h-80 overflow-y-auto"
             >
-              {models.map((m) => (
+              {models.map((m, index) => (
                 <motion.div
                   key={m.id}
-                  initial={{ opacity: 0, x: -10 }}
+                  // Conditionally apply staggered list item animation
+                  initial={animationsEnabled ? { opacity: 0, x: -10 } : false}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{
-                    duration: 0.1,
-                    delay: models.indexOf(m) * 0.05,
-                  }}
+                  transition={animationsEnabled ? {
+                    delay: index * 0.05,
+                  } : undefined}
                   className={cn(
                     "flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors group/model",
                     m.id === selectedModelId
-                      ? "bg-zinc-800/50 text-zinc-100 font-medium"
-                      : "text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200"
+                      ? "bg-[var(--bg-tertiary)] text-[var(--text-primary)] font-medium"
+                      : "text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]/70 hover:text-[var(--text-primary)]"
                   )}
                 >
                   <motion.button
-                    whileHover={{ x: 2 }}
+                    // Conditionally apply hover animation
+                    whileHover={animationsEnabled ? { x: 2 } : undefined}
                     onClick={() => onModelSelect(m.id)}
                     className="flex-1 text-left truncate cursor-pointer"
                   >
@@ -101,9 +109,9 @@ export const Header: React.FC<HeaderProps> = ({
                         "p-1 rounded-full transition-colors",
                         m.id === defaultModelId
                           ? "text-yellow-400 hover:text-yellow-300"
-                          : "text-zinc-600 hover:text-zinc-400 opacity-0 group-hover/model:opacity-100"
+                          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] opacity-0 group-hover/model:opacity-100"
                       )}
-                      whileTap={{ scale: 0.9 }}
+                      whileTap={animationsEnabled ? { scale: 0.9 } : undefined}
                     >
                       <Star
                         size={14}
@@ -113,11 +121,11 @@ export const Header: React.FC<HeaderProps> = ({
 
                     {m.id === selectedModelId && (
                       <motion.div
-                        initial={{ scale: 0.5, opacity: 0, rotate: -90 }}
-                        animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                        transition={spring}
+                         // Conditionally apply checkmark animation
+                        initial={animationsEnabled ? { scale: 0.5, opacity: 0 } : false}
+                        animate={{ scale: 1, opacity: 1 }}
                       >
-                        <Check size={16} className="text-zinc-300" />
+                        <Check size={16} className="text-[var(--text-primary)]" />
                       </motion.div>
                     )}
                   </div>
@@ -128,7 +136,7 @@ export const Header: React.FC<HeaderProps> = ({
         </AnimatePresence>
       </div>
 
-      <div className="text-sm text-zinc-500 hidden sm:block">
+      <div className="text-sm text-[var(--text-secondary)] hidden sm:block">
         {isNewChat
           ? "New Chat"
           : chatList.find((c) => c.id === chatId)?.title || "..."}

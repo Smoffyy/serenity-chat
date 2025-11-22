@@ -25,29 +25,24 @@ interface CodeBlockProps {
 
 // Function to extract raw text content from React children
 const getCodeContent = (children: React.ReactNode): string => {
-    // If children is an array, concatenate the string content
     if (Array.isArray(children)) {
         return children.map(child => {
             if (typeof child === 'string') return child;
-            // Recursively check nested children (e.g., from rehype-highlight)
             if (React.isValidElement(child) && child.props.children) {
                 return getCodeContent(child.props.children);
             }
             return '';
         }).join('');
     }
-    // If it's a single string, return it
     if (typeof children === 'string') {
         return children;
     }
-    // Fallback for other cases
     return '';
 }
 
 const CodeBlock: React.FC<CodeBlockProps> = ({ children, className, inline, ...props }) => {
   const [copied, setCopied] = useState(false);
   
-  // FIX: Extract raw content reliably before it's rendered with highlight tags
   const codeContent = getCodeContent(children).trim(); 
   
   const match = /language-(\w+)/.exec(className || "");
@@ -67,7 +62,6 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ children, className, inline, ...p
     );
   }
 
-  // Non-inline code block (script/multiline code)
   return (
     <div className="relative group/code my-4 rounded-lg overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2 bg-zinc-800/80 text-xs font-mono text-zinc-400 border-b border-zinc-700/50">
@@ -123,14 +117,14 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
     <div className="mb-2 w-full">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-2 text-xs font-medium text-zinc-500 hover:text-zinc-300 transition-colors select-none mb-1"
+        className="flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors select-none mb-1"
       >
         {isThinking ? (
-          <Loader2 size={12} className="animate-spin text-indigo-400" />
+          <Loader2 size={12} className="animate-spin text-[var(--accent-color)]" />
         ) : (
           <Brain size={12} />
         )}
-        <span className={cn(isThinking && "text-indigo-300")}>
+        <span className={cn(isThinking && "text-[var(--accent-color)]")}>
           {isThinking ? "Thinking..." : "Thought Process"}
         </span>
         {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -146,15 +140,16 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
             transition={{ type: "spring", stiffness: 500, damping: 30 }}
             className="overflow-hidden"
           >
-            <div className="bg-zinc-800/40 p-3 rounded-xl border border-zinc-700/40 text-zinc-400 text-xs leading-relaxed border-l-2 border-l-indigo-500/50 prose prose-invert prose-sm max-w-none break-words">
+            <div className="bg-[var(--bg-tertiary)]/40 p-3 rounded-xl border border-[var(--border-color)] text-[var(--text-secondary)] text-xs leading-relaxed border-l-2 border-l-[var(--accent-color)]/50 prose prose-invert prose-sm max-w-none break-words">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkBreaks]}
                 rehypePlugins={[rehypeHighlight]}
                 components={{
+                  // FIX: Use div instead of p to prevent nesting errors if code blocks appear
                   p: ({ children }) => (
-                    <p className="mb-2 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
+                    <div className="mb-2 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
                       {children}
-                    </p>
+                    </div>
                   ),
                 }}
               >
@@ -172,19 +167,18 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
           >
             <div
               ref={scrollRef}
-              className="h-24 overflow-hidden relative bg-zinc-800/20 rounded-lg border border-zinc-800/50 w-full"
+              className="h-24 overflow-hidden relative bg-[var(--bg-tertiary)]/20 rounded-lg border border-[var(--border-color)] w-full"
             >
-              {/* Stronger gradient fading to black/transparent at top */}
-              <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/90 via-transparent to-transparent z-10 pointer-events-none h-12" />
+              <div className="absolute inset-0 bg-gradient-to-b from-[var(--bg-primary)]/90 via-transparent to-transparent z-10 pointer-events-none h-12" />
               
-              <div className="p-3 text-xs text-zinc-500 font-mono leading-relaxed min-h-full flex flex-col justify-end">
+              <div className="p-3 text-xs text-[var(--text-secondary)] font-mono leading-relaxed min-h-full flex flex-col justify-end">
                  <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkBreaks]}
                     components={{
                       p: ({ children }) => (
-                        <p className="mb-2 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
+                        <div className="mb-2 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
                           {children}
-                        </p>
+                        </div>
                       ),
                     }}
                  >
@@ -203,7 +197,6 @@ interface MessageBubbleProps {
   role: "user" | "assistant";
   content: string;
   isGenerating?: boolean;
-  showCursor?: boolean;
 }
 
 const spring: Transition = {
@@ -212,26 +205,10 @@ const spring: Transition = {
   damping: 30,
 };
 
-const TypingCursor = () => (
-  <motion.span
-    aria-hidden="true"
-    className="inline-block w-[10px] h-4 ml-0.5 bg-white align-middle translate-y-[0px]"
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    transition={{
-      duration: 0.5,
-      repeat: Infinity,
-      repeatType: "reverse" as const,
-      ease: "easeInOut",
-    }}
-  />
-);
-
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
   role,
   content,
   isGenerating = false,
-  showCursor = false,
 }) => {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
@@ -242,7 +219,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const showReasoning = !isUser && reasoningContent.length > 0;
   const contentToDisplay = mainContent.trim();
   
-  // Logic to show copy button only when generation is NOT active and there is content
   const showMainCopyButton = !isUser && !isGenerating && contentToDisplay.length > 0;
 
   const handleCopy = () => {
@@ -257,10 +233,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
         rehypePlugins={[rehypeHighlight, rehypeKatex]}
         components={{
+          // FIX: Use div to avoid nesting errors (p > div, p > pre)
           p: ({ children }) => (
-            <p className="mb-3 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
+            <div className="mb-3 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
               {children}
-            </p>
+            </div>
           ),
           ul: ({ children }) => (
             <ul className="list-disc list-outside space-y-1 mb-4 pl-5">{children}</ul>
@@ -271,50 +248,49 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </ol>
           ),
           h1: ({ children }) => (
-            <h1 className="text-2xl font-bold mt-6 mb-4 text-zinc-100">{children}</h1>
+            <h1 className="text-2xl font-bold mt-6 mb-4 text-[var(--text-primary)]">{children}</h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-xl font-bold mt-5 mb-3 text-zinc-100 border-b border-zinc-800 pb-2">
+            <h2 className="text-xl font-bold mt-5 mb-3 text-[var(--text-primary)] border-b border-[var(--border-color)] pb-2">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-lg font-bold mt-4 mb-2 text-zinc-100">{children}</h3>
+            <h3 className="text-lg font-bold mt-4 mb-2 text-[var(--text-primary)]">{children}</h3>
           ),
           a: ({ href, children }) => (
             <a
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-indigo-400 hover:underline"
+              className="text-[var(--accent-color)] hover:underline"
             >
               {children}
             </a>
           ),
           blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-indigo-600 pl-4 italic text-zinc-400 my-4 bg-zinc-900/50 p-2 rounded-r-lg">
+            <blockquote className="border-l-4 border-[var(--accent-color)] pl-4 italic text-[var(--text-secondary)] my-4 bg-[var(--bg-tertiary)]/50 p-2 rounded-r-lg">
               {children}
             </blockquote>
           ),
-          // Use the new custom component for code blocks
           code: (props) => <CodeBlock {...props} />,
           table: ({ children }) => (
-            <div className="w-full overflow-x-auto my-4 rounded-lg border border-zinc-700">
+            <div className="w-full overflow-x-auto my-4 rounded-lg border border-[var(--border-color)]">
               <table className="w-full text-sm text-left border-collapse">{children}</table>
             </div>
           ),
           th: ({ children }) => (
-            <th className="px-4 py-2 bg-zinc-800 border-b border-zinc-700 font-semibold text-zinc-300">
+            <th className="px-4 py-2 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] font-semibold text-[var(--text-primary)]">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-4 py-2 border-b border-zinc-800 last:border-b-0 even:bg-zinc-900/50">
+            <td className="px-4 py-2 border-b border-[var(--border-color)] last:border-b-0 even:bg-[var(--bg-tertiary)]/20">
               {children}
             </td>
           ),
           tr: ({ children }) => (
-            <tr className="border-b border-zinc-700 last:border-b-0 hover:bg-zinc-800/20 transition-colors">
+            <tr className="border-b border-[var(--border-color)] last:border-b-0 hover:bg-[var(--bg-tertiary)]/20 transition-colors">
               {children}
             </tr>
           ),
@@ -322,7 +298,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       >
         {contentToDisplay}
       </ReactMarkdown>
-      {showCursor && !isUser && !isThinking && <TypingCursor />}
     </>
   );
 
@@ -340,7 +315,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         className={cn(
           "relative max-w-full",
           isUser
-            ? "bg-[#2f2f2f] text-zinc-100 px-5 py-3 rounded-[26px] rounded-tr-sm shadow-lg break-words overflow-x-auto"
+            ? "bg-[var(--user-msg-bg)] text-[var(--text-primary)] px-5 py-3 rounded-[26px] rounded-tr-sm shadow-lg break-words overflow-x-auto"
             : "w-full"
         )}
         style={isUser ? { maxWidth: "85%", wordBreak: "break-word", overflowWrap: "break-word" } : {}}
@@ -358,7 +333,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         </div>
       </div>
 
-      {/* Conditional rendering: show button only when generation is NOT active */}
       {showMainCopyButton && (
         <motion.button
           initial={{ opacity: 0, scale: 0.8 }}
@@ -366,7 +340,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           onClick={handleCopy}
-          className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-700 text-zinc-400 text-xs font-medium transition-colors self-start"
+          className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--border-color)] text-[var(--text-secondary)] text-xs font-medium transition-colors self-start"
         >
           {copied ? (
             <>

@@ -1,9 +1,8 @@
 "use client";
 
 import React, { memo } from "react";
-import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Terminal } from "lucide-react";
-// FIXED IMPORT: Adjusted path to point to the parent components folder
 import { MessageBubble } from "../message-bubble";
 import type { Message } from "./types";
 import { cn } from "@/lib/utils";
@@ -11,26 +10,11 @@ import { cn } from "@/lib/utils";
 interface ChatMessagesProps {
   messages: Message[];
   isLoading: boolean;
-  isCursorEnabled: boolean;
   isInitialState: boolean;
   scrollContainerRef: React.RefObject<HTMLDivElement>;
   onScroll: () => void;
+  animationsEnabled: boolean;
 }
-
-const TypingCursor = () => (
-  <motion.span
-    aria-hidden="true"
-    className="inline-block w-[10px] h-4 ml-0.5 bg-white align-middle translate-y-[0px]"
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    transition={{
-      duration: 0.5,
-      repeat: Infinity,
-      repeatType: "reverse" as const,
-      ease: "easeInOut",
-    }}
-  />
-);
 
 const BouncingLoader = () => {
   const dotTransition = {
@@ -44,7 +28,7 @@ const BouncingLoader = () => {
       {[0, 1, 2].map((i) => (
         <motion.div
           key={i}
-          className="w-2 h-2 bg-zinc-500 rounded-full"
+          className="w-2 h-2 bg-[var(--text-secondary)] rounded-full"
           animate={{
             y: ["0%", "-50%", "0%"],
             opacity: [0.4, 1, 0.4],
@@ -63,25 +47,26 @@ const MemoizedMessageBubble = memo(MessageBubble, (prev, next) => {
   return (
     prev.content === next.content &&
     prev.role === next.role &&
-    prev.showCursor === next.showCursor &&
     prev.isGenerating === next.isGenerating
+    // Removed showCursor check
   );
 });
 
 export const ChatMessages: React.FC<ChatMessagesProps> = ({
   messages,
   isLoading,
-  isCursorEnabled,
   isInitialState,
   scrollContainerRef,
   onScroll,
+  animationsEnabled,
 }) => {
   return (
-    // REMOVED LayoutGroup to prevent global layout thrashing during streams
     <div
       className={cn(
-        "flex-1 flex flex-col relative z-10 transition-all duration-500 ease-in-out overflow-hidden",
-        isInitialState ? "justify-center items-center" : "justify-end"
+        "flex-1 flex flex-col relative z-10 overflow-hidden",
+        isInitialState ? "justify-center items-center" : "justify-end",
+        // Only apply transition class if animations are enabled
+        animationsEnabled && "transition-all duration-500 ease-in-out"
       )}
     >
       <div
@@ -103,12 +88,8 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                   m.id === messages[messages.length - 1]?.id &&
                   m.role === "assistant"
                 }
-                showCursor={
-                  isLoading &&
-                  isCursorEnabled &&
-                  m.id === messages[messages.length - 1]?.id &&
-                  m.role === "assistant"
-                }
+                // Removed showCursor prop
+                // Pass animationsEnabled down if MessageBubble needs it (it doesn't currently use it for entry)
               />
             ))}
           </AnimatePresence>
@@ -117,25 +98,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             messages.length > 0 &&
             messages[messages.length - 1]?.role === "user" && (
               <div className="flex justify-start w-full py-2">
-                {isCursorEnabled ? (
-                  <div className="bg-zinc-1000 text-zinc-100 px-5 py-3 rounded-[24px] rounded-tl-sm shadow-lg text-[16px]">
-                    <motion.span
-                      className="text-zinc-500"
-                      initial={{ scale: 0.95 }}
-                      animate={{ scale: 1.05 }}
-                      transition={{
-                        duration: 1,
-                        repeat: Infinity,
-                        repeatType: "reverse",
-                      }}
-                    />
-                    <TypingCursor />
+                  <div className="px-4 py-2 bg-[var(--bg-secondary)] rounded-[26px] rounded-tl-sm">
+                    {/* Only animate the loader if enabled */}
+                    {animationsEnabled ? <BouncingLoader /> : <span className="text-sm text-[var(--text-secondary)]">Thinking...</span>}
                   </div>
-                ) : (
-                  <div className="px-4 py-2">
-                    <BouncingLoader />
-                  </div>
-                )}
               </div>
             )}
 
@@ -146,15 +112,16 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
       <AnimatePresence>
         {isInitialState && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            // Conditionally apply animation props based on setting
+            initial={animationsEnabled ? { opacity: 0, y: 20 } : false}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20, transition: { duration: 0.3 } }}
-            className="flex flex-col items-center justify-center mb-8 z-10 absolute inset-0 flex items-center justify-center"
+            exit={animationsEnabled ? { opacity: 0, y: -20 } : false}
+            className="flex flex-col items-center justify-center mb-8 z-10 absolute inset-0"
           >
-            <div className="w-16 h-16 rounded-3xl bg-zinc-800/50 flex items-center justify-center mb-4 shadow-2xl border border-zinc-700/70 backdrop-blur-sm">
-              <Terminal size={32} className="text-zinc-100" />
+            <div className="w-16 h-16 rounded-3xl bg-[var(--bg-secondary)] flex items-center justify-center mb-4 shadow-2xl border border-[var(--border-color)] backdrop-blur-sm">
+              <Terminal size={32} className="text-[var(--text-primary)]" />
             </div>
-            <h2 className="text-2xl font-semibold text-zinc-100">
+            <h2 className="text-2xl font-semibold text-[var(--text-primary)]">
               Hello! How can I help you?
             </h2>
           </motion.div>
