@@ -30,33 +30,32 @@ const themeDefinitions: Record<Theme, Record<string, string>> = {
     "--text-primary": "#f4f4f5",
     "--text-secondary": "#a1a1aa",
     "--border-color": "#27272a80",
-    // REVERTED: Changed back to white as requested
     "--accent-color": "#ffffff", 
     "--input-bg": "#18181b",
     "--user-msg-bg": "#2f2f2f",
   },
   light: {
     "--bg-primary": "#ffffff",
-    "--bg-secondary": "#f4f4f5",
+    "--bg-secondary": "#e5e5e5ff",
     "--bg-tertiary": "#e4e4e7",
     "--text-primary": "#18181b",
     "--text-secondary": "#71717a",
     "--border-color": "#e4e4e7",
-    // Black accent for light mode visibility
     "--accent-color": "#18181b", 
     "--input-bg": "#ffffff",
     "--user-msg-bg": "#f4f4f5",
   },
   chatgpt: {
-    "--bg-primary": "#343541", 
-    "--bg-secondary": "#202123", 
-    "--bg-tertiary": "#40414f", 
+    "--bg-primary": "#212121", 
+    "--bg-secondary": "#181818", 
+    "--bg-tertiary": "#303030", 
     "--text-primary": "#ececf1",
     "--text-secondary": "#c5c5d2",
     "--border-color": "#4d4d4f80",
-    "--accent-color": "#10a37f", // ChatGPT Green
-    "--input-bg": "#40414f",
-    "--user-msg-bg": "#343541", 
+    //"--accent-color": "#10a37f",
+    "--accent-color": "#ffffffff",
+    "--input-bg": "#303030",
+    "--user-msg-bg": "#303030", 
   },
 };
 
