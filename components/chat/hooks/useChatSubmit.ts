@@ -5,7 +5,7 @@ interface UseChatSubmitProps {
   selectedModelId: string;
   messages: Message[];
   setMessages: (msgs: Message[] | ((prev: Message[]) => Message[])) => void;
-  saveHistory: (msgs: Message[], shouldUpdateDate: boolean) => void;
+  saveHistory: (msgs: Message[], shouldUpdateDate: boolean) => Promise<any>;
   setIsLoading: (loading: boolean) => void;
   setGeneratingChatId: (id: string | null) => void;
   chatIdRef: MutableRefObject<string>;
@@ -101,11 +101,9 @@ export const useChatSubmit = ({
           }
 
           // Construct the full message string using <think> tags for the UI parser
-          // If we have any reasoning, start with <think>
           let fullMessage = "";
           if (aiMsgReasoning) {
              fullMessage += `<think>${aiMsgReasoning}`;
-             // If content has started, we assume reasoning is done, so we close the tag
              if (aiMsgContent) {
                  fullMessage += `</think>`;
              }
@@ -139,7 +137,7 @@ export const useChatSubmit = ({
         }
         finalMessage += aiMsgContent;
 
-        finalizeChat(submittingChatId, chatIdRef, aiMsgId, finalMessage, userMsg, setMessages, saveHistory);
+        await finalizeChat(submittingChatId, chatIdRef, aiMsgId, finalMessage, userMsg, setMessages, saveHistory);
 
       } catch (err) {
         console.error("Generation interrupted:", err);
@@ -209,7 +207,7 @@ function updateLocalStorage(chatId: string, userMsg: Message, aiMsgId: string, c
     }
 }
 
-function finalizeChat(
+async function finalizeChat(
     chatId: string, 
     chatIdRef: MutableRefObject<string>, 
     aiMsgId: string, 

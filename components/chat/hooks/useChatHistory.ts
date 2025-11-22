@@ -10,9 +10,77 @@ export const useChatHistory = (chatId: string) => {
     }
   }, []);
 
+  const generateChatTitle = useCallback(
+    async (messages: Message[]): Promise<string> => {
+      const userMessage = messages.find((m) => m.role === "user");
+      if (!userMessage) return "New Chat";
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [
+              {
+                role: "user",
+                content: `Generate a concise 5-word title for a chat. The user's first message was: "${userMessage.content}". 
+                
+Rules:
+- Exactly 5 words or fewer
+- Capture the main topic/intent
+- Be descriptive but brief
+- Only respond with the title, nothing else
+
+Title:`,
+              },
+            ],
+            model: "gpt-3.5-turbo",
+          }),
+        });
+
+        if (!response.ok) throw new Error("Failed to generate title");
+        if (!response.body) throw new Error("No stream available");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let title = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (line.trim() === "" || line.trim() === "data: [DONE]") continue;
+            if (line.startsWith("data: ")) {
+              try {
+                const json = JSON.parse(line.substring(6));
+                const delta = json.choices?.[0]?.delta;
+                if (delta?.content) {
+                  title += delta.content;
+                }
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+          }
+        }
+
+        const cleanedTitle = title.trim().replace(/^Title:\s*/i, "").trim();
+        return cleanedTitle.slice(0, 60) || "New Chat"; // Cap at 60 chars
+      } catch (err) {
+        console.error("Error generating title:", err);
+        return "New Chat";
+      }
+    },
+    []
+  );
+
   const saveHistory = useCallback(
-    (currentMessages: Message[], shouldUpdateDate = false) => {
-      if (currentMessages.length === 0) return;
+    async (currentMessages: Message[], shouldUpdateDate = false): Promise<ChatMetadata[]> => {
+      if (currentMessages.length === 0) return getChatMetadata();
 
       localStorage.setItem(`chat_${chatId}`, JSON.stringify(currentMessages));
 
@@ -25,11 +93,17 @@ export const useChatHistory = (chatId: string) => {
       if (existingIndex > -1) {
         title = currentList[existingIndex].title;
         date = shouldUpdateDate ? Date.now() : currentList[existingIndex].date;
+
+        // Only generate title once: if title is "New Chat", have 2+ messages, and this is the first time (only when AI just responded)
+        if (title === "New Chat" && currentMessages.length >= 2 && shouldUpdateDate) {
+          title = await generateChatTitle(currentMessages);
+        }
       } else if (currentMessages.length > 0) {
-        const firstUserMsg = currentMessages.find((m) => m.role === "user");
-        if (firstUserMsg) {
-          const txt = firstUserMsg.content.trim();
-          title = txt.length > 30 ? `${txt.slice(0, 30)}...` : txt;
+        // New chat - only generate if we have 2+ messages and shouldUpdateDate is true (meaning AI just responded)
+        if (currentMessages.length >= 2 && shouldUpdateDate) {
+          title = await generateChatTitle(currentMessages);
+        } else {
+          title = "New Chat";
         }
       }
 
@@ -44,7 +118,7 @@ export const useChatHistory = (chatId: string) => {
       
       return sortedList;
     },
-    [chatId, getChatMetadata]
+    [chatId, getChatMetadata, generateChatTitle]
   );
 
   return { getChatMetadata, saveHistory };

@@ -98,9 +98,10 @@ export default function ChatInterface() {
     selectedModelId,
     messages,
     setMessages,
-    saveHistory: (msgs, shouldUpdateDate) => {
-      const updatedList = saveHistoryBase(msgs, shouldUpdateDate);
+    saveHistory: async (msgs, shouldUpdateDate) => {
+      const updatedList = await saveHistoryBase(msgs, shouldUpdateDate);
       setChatList(updatedList || []);
+      return updatedList;
     },
     setIsLoading,
     setGeneratingChatId,
@@ -144,9 +145,19 @@ export default function ChatInterface() {
     
     if (defaultModelId) setSelectedModelId(defaultModelId);
     
+    // Create a placeholder chat in the list immediately
+    const newChat: ChatMetadata = {
+      id: newChatId,
+      title: "New Chat",
+      date: Date.now(),
+    };
+    const updatedList = [newChat, ...(chatList || [])];
+    setChatList(updatedList);
+    localStorage.setItem("all_chats", JSON.stringify(updatedList));
+    
     router.push(`?chat=${newChatId}`);
     setTimeout(() => inputRef.current?.focus(), 300);
-  }, [messages, isNewChat, saveHistoryBase, defaultModelId, router]);
+  }, [messages, isNewChat, saveHistoryBase, defaultModelId, router, chatList]);
 
   const deleteAllChats = useCallback(() => {
     chatList.forEach((c) => localStorage.removeItem(`chat_${c.id}`));
@@ -335,9 +346,22 @@ export default function ChatInterface() {
       setIsNewChat(false);
       setGeneratingChatId(chatId);
 
+      // Create a placeholder chat immediately if this is the first message
+      if (messages.length === 0) {
+        const newChat: ChatMetadata = {
+          id: chatId,
+          title: "New Chat",
+          date: Date.now(),
+        };
+        const filtered = (chatList || []).filter((c) => c.id !== chatId);
+        const updatedList = [newChat, ...filtered];
+        setChatList(updatedList);
+        localStorage.setItem("all_chats", JSON.stringify(updatedList));
+      }
+
       await submitChat(e, input, setInput);
     },
-    [selectedModelId, input, isLoading, submitChat, chatId]
+    [selectedModelId, input, isLoading, submitChat, chatId, messages, chatList]
   );
 
   return (
