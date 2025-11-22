@@ -64,6 +64,9 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkBreaks]}
                 rehypePlugins={[rehypeHighlight]}
+                components={{
+                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>
+                }}
               >
                 {content}
               </ReactMarkdown>
@@ -79,11 +82,19 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
           >
             <div
               ref={scrollRef}
-              className="h-14 overflow-hidden relative bg-zinc-800/20 rounded-lg border border-zinc-800/50 w-full"
+              className="h-24 overflow-hidden relative bg-zinc-800/20 rounded-lg border border-zinc-800/50 w-full"
             >
-              <div className="absolute inset-0 bg-gradient-to-b from-[#06060a] via-transparent to-transparent z-10 pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/90 via-transparent to-transparent z-10 pointer-events-none h-12" />
+              
               <div className="p-3 text-xs text-zinc-500 font-mono leading-relaxed min-h-full flex flex-col justify-end">
-                 <span className="whitespace-pre-wrap">{content}</span>
+                 <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkBreaks]}
+                    components={{
+                        p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>
+                    }}
+                 >
+                    {content}
+                 </ReactMarkdown>
               </div>
             </div>
           </motion.div>
