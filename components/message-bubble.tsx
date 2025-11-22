@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Children } from "react"; // ADDED Children import
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -15,6 +15,92 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
 import "highlight.js/styles/atom-one-dark.css";
+
+// --- New Code Block Copy Component ---
+interface CodeBlockProps {
+  children: React.ReactNode;
+  className?: string;
+  inline?: boolean;
+}
+
+// Function to extract raw text content from React children
+const getCodeContent = (children: React.ReactNode): string => {
+    // If children is an array, concatenate the string content
+    if (Array.isArray(children)) {
+        return children.map(child => {
+            if (typeof child === 'string') return child;
+            // Recursively check nested children (e.g., from rehype-highlight)
+            if (React.isValidElement(child) && child.props.children) {
+                return getCodeContent(child.props.children);
+            }
+            return '';
+        }).join('');
+    }
+    // If it's a single string, return it
+    if (typeof children === 'string') {
+        return children;
+    }
+    // Fallback for other cases
+    return '';
+}
+
+const CodeBlock: React.FC<CodeBlockProps> = ({ children, className, inline, ...props }) => {
+  const [copied, setCopied] = useState(false);
+  
+  // FIX: Extract raw content reliably before it's rendered with highlight tags
+  const codeContent = getCodeContent(children).trim(); 
+  
+  const match = /language-(\w+)/.exec(className || "");
+  const language = match ? match[1] : '';
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(codeContent);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (inline) {
+    return (
+      <code className={cn(className, "break-words whitespace-pre-wrap")} {...props}>
+        {children}
+      </code>
+    );
+  }
+
+  // Non-inline code block (script/multiline code)
+  return (
+    <div className="relative group/code my-4 rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2 bg-zinc-800/80 text-xs font-mono text-zinc-400 border-b border-zinc-700/50">
+        <span className="capitalize">{language || 'code'}</span>
+        <motion.button
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300 transition-colors"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          {copied ? (
+            <>
+              <Check size={14} className="text-emerald-400" />
+              <span className="text-emerald-400">Copied!</span>
+            </>
+          ) : (
+            <>
+              <Copy size={14} />
+              <span>Copy Code</span>
+            </>
+          )}
+        </motion.button>
+      </div>
+      <pre className="p-4 bg-zinc-900 overflow-x-auto">
+        <code className={cn(className, "break-words whitespace-pre-wrap")} {...props}>
+          {children}
+        </code>
+      </pre>
+    </div>
+  );
+};
+// ------------------------------------
+
 
 interface ReasoningProps {
   content: string;
@@ -64,9 +150,7 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkBreaks]}
                 rehypePlugins={[rehypeHighlight]}
-                components={{
-                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>
-                }}
+                // REMOVED P OVERRIDE HERE TO ALLOW BLOCK ELEMENTS TO RENDER CORRECTLY
               >
                 {content}
               </ReactMarkdown>
@@ -84,14 +168,13 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
               ref={scrollRef}
               className="h-24 overflow-hidden relative bg-zinc-800/20 rounded-lg border border-zinc-800/50 w-full"
             >
+              {/* Stronger gradient fading to black/transparent at top */}
               <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/90 via-transparent to-transparent z-10 pointer-events-none h-12" />
               
               <div className="p-3 text-xs text-zinc-500 font-mono leading-relaxed min-h-full flex flex-col justify-end">
                  <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkBreaks]}
-                    components={{
-                        p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>
-                    }}
+                    // REMOVED P OVERRIDE HERE TO ALLOW BLOCK ELEMENTS TO RENDER CORRECTLY
                  >
                     {content}
                  </ReactMarkdown>
@@ -146,6 +229,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const isThinking = isGenerating && !isUser && reasoningContent.length > 0 && mainContent.trim().length === 0;
   const showReasoning = !isUser && reasoningContent.length > 0;
   const contentToDisplay = mainContent.trim();
+  
+  // Logic to show copy button only when generation is NOT active and there is content
+  const showMainCopyButton = !isUser && !isGenerating && contentToDisplay.length > 0;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(contentToDisplay || reasoningContent);
@@ -159,11 +245,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
         rehypePlugins={[rehypeHighlight, rehypeKatex]}
         components={{
-          p: ({ children }) => (
-            <p className="mb-3 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
-              {children}
-            </p>
-          ),
+          // FIX: REMOVED P OVERRIDE TO FIX NESTING/HYDRATION ERRORS. 
+          // Tailwind prose handles default spacing for block elements.
+          // p: ({ children }) => (
+          //   <p className="mb-3 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
+          //     {children}
+          //   </p>
+          // ),
           ul: ({ children }) => (
             <ul className="list-disc list-outside space-y-1 mb-4 pl-5">{children}</ul>
           ),
@@ -198,21 +286,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               {children}
             </blockquote>
           ),
-          code: ({ node, inline, className, children, ...props }) => {
-            const match = /language-(\w+)/.exec(className || "");
-            if (!inline && match) {
-              return (
-                <code className={cn(className, "break-words whitespace-pre-wrap")} {...props}>
-                  {children}
-                </code>
-              );
-            }
-            return (
-              <code className={cn(className, "break-words whitespace-pre-wrap")} {...props}>
-                {children}
-              </code>
-            );
-          },
+          // Use the new custom component for code blocks
+          code: (props) => <CodeBlock {...props} />,
           table: ({ children }) => (
             <div className="w-full overflow-x-auto my-4 rounded-lg border border-zinc-700">
               <table className="w-full text-sm text-left border-collapse">{children}</table>
@@ -273,7 +348,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         </div>
       </div>
 
-      {!isUser && (
+      {/* Conditional rendering: show button only when generation is NOT active */}
+      {showMainCopyButton && (
         <motion.button
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
