@@ -1,31 +1,43 @@
-import { createOpenAI } from '@ai-sdk/openai';
-import { streamText } from 'ai';
+import { NextRequest, NextResponse } from "next/server";
+import { API_CONFIG } from "@/lib/api-config";
 
-// CONFIGURATION: Set up the OpenAI provider to point to LM Studio
-const lmStudio = createOpenAI({
-  baseURL: 'http://127.0.0.1:1234/v1',
-  apiKey: 'lm-studio',
-});
+export const runtime = "edge";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { messages, model } = await req.json();
 
-    console.log(`[Server] Sending request to Local AI... Model: ${model}`);
-
-    const result = streamText({
-      // Use the configured provider instance with the selected model ID
-      model: lmStudio(model || 'local-model'), 
-      messages,
+    const response = await fetch(`${API_CONFIG.BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: API_CONFIG.headers,
+      body: JSON.stringify({
+        model: model,
+        messages: messages,
+        stream: true, 
+        temperature: 0.7,
+      }),
     });
 
-    // Return the response as a stream of text
-    return result.toTextStreamResponse();
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: "LM Studio Error: " + response.statusText },
+        { status: response.status }
+      );
+    }
 
+    // Pass the stream directly through to the client
+    return new NextResponse(response.body, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (error) {
-    console.error("[Server Error]", error);
-    return new Response(JSON.stringify({ error: "Failed to connect to LM Studio" }), {
-      status: 500,
-    });
+    console.error("Proxy Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

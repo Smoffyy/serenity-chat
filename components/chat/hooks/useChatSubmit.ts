@@ -28,10 +28,7 @@ export const useChatSubmit = ({
       const userText = input.trim();
       setInput("");
       
-      // Capture the ID of the chat that INITIATED the request
       const submittingChatId = chatIdRef.current;
-      
-      // Capture current messages state at moment of send
       const currentHistory = [...messages];
 
       const userMsg: Message = {
@@ -40,6 +37,7 @@ export const useChatSubmit = ({
         content: userText,
       };
 
+      // Optimistically add user message
       if (submittingChatId === chatIdRef.current) {
         setMessages((prev) => [...prev, userMsg]);
       }
@@ -49,10 +47,9 @@ export const useChatSubmit = ({
 
       const aiMsgId = `${Date.now() + 1}`;
       
-      // Helper to construct the final AI message object
+      // Track distinct parts of the response
+      let aiMsgReasoning = "";
       let aiMsgContent = "";
-      
-      await new Promise((resolve) => setTimeout(resolve, 50));
 
       try {
         const response = await fetch("/api/chat", {
@@ -67,7 +64,7 @@ export const useChatSubmit = ({
           }),
         });
 
-        if (!response.ok) throw new Error("Connection failed or API error");
+        if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
         if (!response.body) throw new Error("No stream available");
 
         const reader = response.body.getReader();
@@ -78,101 +75,103 @@ export const useChatSubmit = ({
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
-          aiMsgContent += chunk;
+          const lines = chunk.split("\n");
+          
+          for (const line of lines) {
+            if (line.trim() === "" || line.trim() === "data: [DONE]") continue;
+            if (line.startsWith("data: ")) {
+              try {
+                 const json = JSON.parse(line.substring(6));
+                 const delta = json.choices?.[0]?.delta;
 
+                 if (delta) {
+                    // Capture reasoning tokens if they exist
+                    if (delta.reasoning_content) {
+                        aiMsgReasoning += delta.reasoning_content;
+                    }
+                    // Capture standard content tokens
+                    if (delta.content) {
+                        aiMsgContent += delta.content;
+                    }
+                 }
+              } catch (e) {
+                 // Ignore parse errors for partial chunks
+              }
+            }
+          }
+
+          // Construct the full message string using <think> tags for the UI parser
+          // If we have any reasoning, start with <think>
+          let fullMessage = "";
+          if (aiMsgReasoning) {
+             fullMessage += `<think>${aiMsgReasoning}`;
+             // If content has started, we assume reasoning is done, so we close the tag
+             if (aiMsgContent) {
+                 fullMessage += `</think>`;
+             }
+          }
+          fullMessage += aiMsgContent;
+
+          // Update UI or Storage
           if (submittingChatId === chatIdRef.current) {
-            // User is on the active chat -> Update UI State
             setMessages((prev) => {
-              // If the message exists, update it; otherwise append it
               const exists = prev.some((m) => m.id === aiMsgId);
               if (exists) {
                 return prev.map((m) =>
-                  m.id === aiMsgId ? { ...m, content: aiMsgContent } : m
+                  m.id === aiMsgId ? { ...m, content: fullMessage } : m
                 );
               } else {
                 return [
                   ...prev,
-                  { id: aiMsgId, role: "assistant", content: aiMsgContent },
+                  { id: aiMsgId, role: "assistant", content: fullMessage },
                 ];
               }
             });
           } else {
-            // User switched tabs -> Update LocalStorage silently
-            const savedChat = localStorage.getItem(`chat_${submittingChatId}`);
-            
-            if (savedChat) {
-              const chatMessages = JSON.parse(savedChat) as Message[];
-              
-              // We need to ensure the User Message is saved first if it wasn't yet
-              const userMsgExists = chatMessages.some(m => m.id === userMsg.id);
-              if (!userMsgExists) {
-                 chatMessages.push(userMsg);
-              }
-
-              const existingAiMsg = chatMessages.find((m) => m.id === aiMsgId);
-              if (existingAiMsg) {
-                existingAiMsg.content = aiMsgContent;
-              } else {
-                chatMessages.push({
-                  id: aiMsgId,
-                  role: "assistant",
-                  content: aiMsgContent,
-                });
-              }
-              localStorage.setItem(`chat_${submittingChatId}`, JSON.stringify(chatMessages));
-            } else {
-                // If savedChat is null, the user might have deleted the chat while it was generating.
-                // In that case, we should stop processing to avoid resurrecting a deleted chat.
-                break; 
-            }
+            updateLocalStorage(submittingChatId, userMsg, aiMsgId, fullMessage);
           }
         }
 
-        const finalMsg: Message = { id: aiMsgId, role: "assistant", content: aiMsgContent };
-        
-        if (submittingChatId === chatIdRef.current) {
-          setMessages(prev => {
-             const final = prev.map(m => m.id === aiMsgId ? finalMsg : m);
-             saveHistory(final, true);
-             return final;
-          });
-        } else {
-           // Background save finalization
-           const savedChat = localStorage.getItem(`chat_${submittingChatId}`);
-           if (savedChat) {
-             const chatMessages = JSON.parse(savedChat) as Message[];
-             // Ensure user message is there
-             if (!chatMessages.some(m => m.id === userMsg.id)) {
-                 chatMessages.push(userMsg);
-             }
-             // Update or push AI message
-             const existingIndex = chatMessages.findIndex(m => m.id === aiMsgId);
-             if (existingIndex !== -1) {
-                 chatMessages[existingIndex] = finalMsg;
-             } else {
-                 chatMessages.push(finalMsg);
-             }
-             localStorage.setItem(`chat_${submittingChatId}`, JSON.stringify(chatMessages));
-             
-             const allChatsStr = localStorage.getItem("all_chats");
-             if(allChatsStr) {
-                 const allChats = JSON.parse(allChatsStr);
-                 const chatIndex = allChats.findIndex((c: any) => c.id === submittingChatId);
-                 if(chatIndex > -1) {
-                     allChats[chatIndex].date = Date.now();
-                     localStorage.setItem("all_chats", JSON.stringify(allChats.sort((a: any, b: any) => b.date - a.date)));
-                 }
-             }
-           }
+        // Final construction for save
+        let finalMessage = "";
+        if (aiMsgReasoning) {
+            finalMessage += `<think>${aiMsgReasoning}</think>`;
         }
+        finalMessage += aiMsgContent;
+
+        finalizeChat(submittingChatId, chatIdRef, aiMsgId, finalMessage, userMsg, setMessages, saveHistory);
 
       } catch (err) {
-        console.error("Chat error:", err);
+        console.error("Generation interrupted:", err);
+        
+        // Construct partial error message
+        let partialMsg = "";
+        if (aiMsgReasoning) partialMsg += `<think>${aiMsgReasoning}`; // Leave open to show incomplete thought
+        if (aiMsgContent) {
+             if (aiMsgReasoning) partialMsg += `</think>`; 
+             partialMsg += aiMsgContent;
+        }
+        
+        const errorAppendix = partialMsg.length > 0 
+            ? "\n\n*[Connection interrupted]*" 
+            : "Error: Could not generate response.";
+            
+        const finalContent = partialMsg + errorAppendix;
+
         if (submittingChatId === chatIdRef.current) {
-          setMessages((prev) =>
-            prev.filter((m) => m.id !== aiMsgId && m.id !== userMsg.id)
-          );
-          setInput(userText);
+             setMessages(prev => {
+                 const exists = prev.some(m => m.id === aiMsgId);
+                 let newHistory;
+                 if(exists) {
+                     newHistory = prev.map(m => m.id === aiMsgId ? {...m, content: finalContent} : m);
+                 } else {
+                     newHistory = [...prev, { id: aiMsgId, role: "assistant", content: finalContent }];
+                 }
+                 saveHistory(newHistory, true);
+                 return newHistory;
+             });
+        } else {
+             updateLocalStorage(submittingChatId, userMsg, aiMsgId, finalContent);
         }
       } finally {
         setIsLoading(false);
@@ -184,3 +183,59 @@ export const useChatSubmit = ({
 
   return { onSubmit };
 };
+
+/* --- Helpers for Background Storage Updates --- */
+
+function updateLocalStorage(chatId: string, userMsg: Message, aiMsgId: string, content: string) {
+    const savedChat = localStorage.getItem(`chat_${chatId}`);
+    if (savedChat) {
+      const chatMessages = JSON.parse(savedChat) as Message[];
+      
+      if (!chatMessages.some(m => m.id === userMsg.id)) {
+         chatMessages.push(userMsg);
+      }
+
+      const existingAiMsg = chatMessages.find((m) => m.id === aiMsgId);
+      if (existingAiMsg) {
+        existingAiMsg.content = content;
+      } else {
+        chatMessages.push({
+          id: aiMsgId,
+          role: "assistant",
+          content: content,
+        });
+      }
+      localStorage.setItem(`chat_${chatId}`, JSON.stringify(chatMessages));
+    }
+}
+
+function finalizeChat(
+    chatId: string, 
+    chatIdRef: MutableRefObject<string>, 
+    aiMsgId: string, 
+    finalContent: string, 
+    userMsg: Message,
+    setMessages: any, 
+    saveHistory: any
+) {
+    const finalMsg = { id: aiMsgId, role: "assistant" as const, content: finalContent };
+
+    if (chatId === chatIdRef.current) {
+        setMessages((prev: Message[]) => {
+            const final = prev.map(m => m.id === aiMsgId ? finalMsg : m);
+            saveHistory(final, true);
+            return final;
+        });
+    } else {
+        updateLocalStorage(chatId, userMsg, aiMsgId, finalContent);
+        const allChatsStr = localStorage.getItem("all_chats");
+        if(allChatsStr) {
+            const allChats = JSON.parse(allChatsStr);
+            const chatIndex = allChats.findIndex((c: any) => c.id === chatId);
+            if(chatIndex > -1) {
+                allChats[chatIndex].date = Date.now();
+                localStorage.setItem("all_chats", JSON.stringify(allChats.sort((a: any, b: any) => b.date - a.date)));
+            }
+        }
+    }
+}

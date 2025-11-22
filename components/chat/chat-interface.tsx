@@ -31,7 +31,6 @@ export default function ChatInterface() {
   const [defaultModelId, setDefaultModelId] = useState<string>("");
   
   const [chatId, setChatId] = useState<string>("");
-  // Ref to track the active chat ID instantly for async operations
   const chatIdRef = useRef<string>("");
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -61,7 +60,7 @@ export default function ChatInterface() {
   useEffect(() => {
     if (urlChatId) {
       setChatId(urlChatId);
-      chatIdRef.current = urlChatId; // Update ref immediately
+      chatIdRef.current = urlChatId;
       
       shouldAutoScrollRef.current = true;
 
@@ -80,10 +79,8 @@ export default function ChatInterface() {
         setIsNewChat(true);
       }
 
-      // Reset input focus
       setTimeout(() => inputRef.current?.focus(), 300);
     } else {
-      // No chat in URL, create new chat
       const newChatId = Date.now().toString();
       setChatId(newChatId);
       chatIdRef.current = newChatId;
@@ -97,7 +94,6 @@ export default function ChatInterface() {
   /* ---------- HOOKS ---------- */
   const { getChatMetadata, saveHistory: saveHistoryBase } = useChatHistory(chatId);
 
-  // Pass the ref to useChatSubmit so it knows the LIVE status of the UI
   const { onSubmit: submitChat } = useChatSubmit({
     selectedModelId,
     messages,
@@ -108,7 +104,7 @@ export default function ChatInterface() {
     },
     setIsLoading,
     setGeneratingChatId,
-    chatIdRef, // Passing the Ref instead of just the value
+    chatIdRef,
   });
 
   /* ---------- SETTINGS ---------- */
@@ -126,7 +122,6 @@ export default function ChatInterface() {
         return;
       }
 
-      // Save current chat before switching if needed
       if (messages.length > 0 && chatId !== id && !isNewChat) {
         saveHistoryBase(messages, false);
       }
@@ -170,7 +165,6 @@ export default function ChatInterface() {
       localStorage.setItem("all_chats", JSON.stringify(updatedList));
       setChatList(updatedList);
 
-      // If deleting current chat, go to new chat
       if (chatId === id) startNewChat();
     },
     [chatId, chatList, startNewChat]
@@ -210,7 +204,6 @@ export default function ChatInterface() {
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        // Pass the event as React.FormEvent since it's compatible for our usage
         submitChat(e as unknown as FormEvent, input, setInput);
       }
     },
@@ -279,7 +272,6 @@ export default function ChatInterface() {
       setIsCursorEnabled(true);
     }
 
-    // Fetch models
     fetch("/api/models")
       .then((res) => res.json())
       .then((data) => {
@@ -292,7 +284,6 @@ export default function ChatInterface() {
           )
             initialModel = savedDefaultModel;
           
-          // Only set if not already set (prevents overwriting user selection on re-mounts)
           setSelectedModelId((prev) => prev || initialModel);
         }
       })
@@ -314,21 +305,19 @@ export default function ChatInterface() {
   useEffect(() => {
     if (isInitialState || !scrollContainerRef.current) return;
 
-    // If auto-scroll is enabled, snap to bottom on new messages
     if (shouldAutoScrollRef.current) {
       scrollContainerRef.current.scrollTo({
         top: scrollContainerRef.current.scrollHeight,
         behavior: isLoading ? "smooth" : "auto",
       });
     }
-  }, [messages, isLoading, isInitialState]); // Trigger on message updates
+  }, [messages, isLoading, isInitialState]);
 
   /* ---------- AUTO FOCUS AFTER RESPONSE ---------- */
   useEffect(() => {
     if (!isLoading && messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === "assistant") {
-        // Small delay to ensure DOM is ready
         setTimeout(() => inputRef.current?.focus(), 50);
       }
     }

@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import remarkBreaks from "remark-breaks";
 import { cn } from "@/lib/utils";
-import { motion, type Transition } from "framer-motion";
-import { Copy, Check } from "lucide-react";
+import { motion, type Transition, AnimatePresence } from "framer-motion";
+import { Copy, Check, Brain, ChevronRight, ChevronDown, Loader2 } from "lucide-react";
+import { parseReasoning } from "@/lib/reasoning-parser";
 
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -15,9 +16,87 @@ import "katex/dist/katex.min.css";
 
 import "highlight.js/styles/atom-one-dark.css";
 
+interface ReasoningProps {
+  content: string;
+  isThinking: boolean; 
+}
+
+const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isThinking && !isExpanded && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [content, isThinking, isExpanded]);
+
+  if (!content) return null;
+
+  return (
+    <div className="mb-2 w-full">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-2 text-xs font-medium text-zinc-500 hover:text-zinc-300 transition-colors select-none mb-1"
+      >
+        {isThinking ? (
+          <Loader2 size={12} className="animate-spin text-indigo-400" />
+        ) : (
+          <Brain size={12} />
+        )}
+        <span className={cn(isThinking && "text-indigo-300")}>
+          {isThinking ? "Thinking..." : "Thought Process"}
+        </span>
+        {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+      </button>
+
+      <AnimatePresence initial={false} mode="wait">
+        {isExpanded ? (
+          <motion.div
+            key="expanded"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-zinc-800/40 p-3 rounded-xl border border-zinc-700/40 text-zinc-400 text-xs leading-relaxed border-l-2 border-l-indigo-500/50 prose prose-invert prose-sm max-w-none break-words">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                rehypePlugins={[rehypeHighlight]}
+              >
+                {content}
+              </ReactMarkdown>
+            </div>
+          </motion.div>
+        ) : isThinking ? (
+          <motion.div
+            key="preview"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="relative w-full"
+          >
+            <div
+              ref={scrollRef}
+              className="h-14 overflow-hidden relative bg-zinc-800/20 rounded-lg border border-zinc-800/50 w-full"
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-[#06060a] via-transparent to-transparent z-10 pointer-events-none" />
+              <div className="p-3 text-xs text-zinc-500 font-mono leading-relaxed min-h-full flex flex-col justify-end">
+                 <span className="whitespace-pre-wrap">{content}</span>
+              </div>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 interface MessageBubbleProps {
   role: "user" | "assistant";
   content: string;
+  isGenerating?: boolean;
   showCursor?: boolean;
 }
 
@@ -45,165 +124,115 @@ const TypingCursor = () => (
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
   role,
   content,
+  isGenerating = false,
   showCursor = false,
 }) => {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
 
+  const { reasoningContent, mainContent } = parseReasoning(content);
+
+  const isThinking = isGenerating && !isUser && reasoningContent.length > 0 && mainContent.trim().length === 0;
+  const showReasoning = !isUser && reasoningContent.length > 0;
+  const contentToDisplay = mainContent.trim();
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(content);
+    navigator.clipboard.writeText(contentToDisplay || reasoningContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Memoize the component definition so it doesn't re-create on every render
-  // This significantly improves performance during typing/streaming
-  const MarkdownComponents = useMemo<Record<string, React.FC<any>>>(() => ({
-    p: ({ children }) => (
-      <p className="mb-3 last:mb-0 leading-7 whitespace-pre-wrap break-words">
-        {children}
-      </p>
-    ),
-    ul: ({ children }) => (
-      <ul className="list-disc list-outside space-y-1 mb-4 pl-5">{children}</ul>
-    ),
-    ol: ({ children }) => (
-      <ol className="list-decimal list-outside space-y-1 mb-4 pl-5">
-        {children}
-      </ol>
-    ),
-    h1: ({ children }) => (
-      <h1 className="text-2xl font-bold mt-6 mb-4 text-zinc-100">{children}</h1>
-    ),
-    h2: ({ children }) => (
-      <h2 className="text-xl font-bold mt-5 mb-3 text-zinc-100 border-b border-zinc-800 pb-2">
-        {children}
-      </h2>
-    ),
-    h3: ({ children }) => (
-      <h3 className="text-lg font-bold mt-4 mb-2 text-zinc-100">{children}</h3>
-    ),
-    a: ({ href, children }) => (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-indigo-400 hover:underline"
-      >
-        {children}
-      </a>
-    ),
-    blockquote: ({ children }) => (
-      <blockquote className="border-l-4 border-indigo-600 pl-4 italic text-zinc-400 my-4 bg-zinc-900/50 p-2 rounded-r-lg">
-        {children}
-      </blockquote>
-    ),
-    code: ({ node, className, children, ...props }) => {
-      const match = /language-(\w+)/.exec(className || "");
-      const isInline = !match;
-
-      if (isInline) {
-        return (
-          <code
-            className="bg-zinc-800 px-1.5 py-0.5 rounded text-sm font-mono text-indigo-300"
-            {...props}
-          >
-            {children}
-          </code>
-        );
-      }
-
-      return (
-        <div className="my-4 rounded-xl overflow-hidden border border-zinc-800 bg-[#0d0d0d]">
-          <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900 border-b border-zinc-800">
-            <span className="text-xs text-zinc-500 font-medium">{match![1]}</span>
-          </div>
-          <div className="p-4 overflow-x-auto">
-            <code
-              className={cn(className, "text-sm font-mono")}
-              {...props}
-            >
-              {children}
-            </code>
-          </div>
-        </div>
-      );
-    },
-    table: ({ children }) => (
-      <div className="w-full overflow-x-auto my-4 rounded-lg border border-zinc-700">
-        <table className="w-full text-sm text-left border-collapse">{children}</table>
-      </div>
-    ),
-    th: ({ children }) => (
-      <th className="px-4 py-2 bg-zinc-800 border-b border-zinc-700 font-semibold text-zinc-300">
-        {children}
-      </th>
-    ),
-    td: ({ children }) => (
-      <td className="px-4 py-2 border-b border-zinc-800 last:border-b-0 even:bg-zinc-900/50">{children}</td>
-    ),
-    tr: ({ children }) => (
-      <tr className="border-b border-zinc-700 last:border-b-0 hover:bg-zinc-800/20 transition-colors">
-        {children}
-      </tr>
-    ),
-    br: () => <br />,
-  }), []);
-
-  const renderedContent = useMemo(() => {
-    if (showCursor && !isUser) {
-      const contentToParse = content;
-      let finalMarkdown = "";
-      let streamingChunk = "";
-
-      const lastBlockBreakIndex = contentToParse.lastIndexOf("\n\n");
-
-      if (lastBlockBreakIndex !== -1) {
-        finalMarkdown = contentToParse.substring(0, lastBlockBreakIndex);
-        streamingChunk = contentToParse.substring(lastBlockBreakIndex);
-      } else {
-        finalMarkdown = "";
-        streamingChunk = contentToParse;
-      }
-
-      return (
-        <>
-          {finalMarkdown.length > 0 && (
-            <div className="inline">
-              <ReactMarkdown
-                components={MarkdownComponents}
-                remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
-                rehypePlugins={[rehypeHighlight, rehypeKatex]}
-                skipHtml={false}
-              >
-                {finalMarkdown}
-              </ReactMarkdown>
-            </div>
-          )}
-
-          <span className="whitespace-pre-wrap break-words leading-7 text-zinc-100 inline">
-            {streamingChunk}
-            <TypingCursor />
-          </span>
-        </>
-      );
-    }
-
-    return (
+  const renderedContent = (
+    <>
       <ReactMarkdown
-        components={MarkdownComponents}
         remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
         rehypePlugins={[rehypeHighlight, rehypeKatex]}
-        skipHtml={false}
+        components={{
+          p: ({ children }) => (
+            <p className="mb-3 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
+              {children}
+            </p>
+          ),
+          ul: ({ children }) => (
+            <ul className="list-disc list-outside space-y-1 mb-4 pl-5">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="list-decimal list-outside space-y-1 mb-4 pl-5">
+              {children}
+            </ol>
+          ),
+          h1: ({ children }) => (
+            <h1 className="text-2xl font-bold mt-6 mb-4 text-zinc-100">{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="text-xl font-bold mt-5 mb-3 text-zinc-100 border-b border-zinc-800 pb-2">
+              {children}
+            </h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="text-lg font-bold mt-4 mb-2 text-zinc-100">{children}</h3>
+          ),
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-400 hover:underline"
+            >
+              {children}
+            </a>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-4 border-indigo-600 pl-4 italic text-zinc-400 my-4 bg-zinc-900/50 p-2 rounded-r-lg">
+              {children}
+            </blockquote>
+          ),
+          code: ({ node, inline, className, children, ...props }) => {
+            const match = /language-(\w+)/.exec(className || "");
+            if (!inline && match) {
+              return (
+                <code className={cn(className, "break-words whitespace-pre-wrap")} {...props}>
+                  {children}
+                </code>
+              );
+            }
+            return (
+              <code className={cn(className, "break-words whitespace-pre-wrap")} {...props}>
+                {children}
+              </code>
+            );
+          },
+          table: ({ children }) => (
+            <div className="w-full overflow-x-auto my-4 rounded-lg border border-zinc-700">
+              <table className="w-full text-sm text-left border-collapse">{children}</table>
+            </div>
+          ),
+          th: ({ children }) => (
+            <th className="px-4 py-2 bg-zinc-800 border-b border-zinc-700 font-semibold text-zinc-300">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="px-4 py-2 border-b border-zinc-800 last:border-b-0 even:bg-zinc-900/50">
+              {children}
+            </td>
+          ),
+          tr: ({ children }) => (
+            <tr className="border-b border-zinc-700 last:border-b-0 hover:bg-zinc-800/20 transition-colors">
+              {children}
+            </tr>
+          ),
+        }}
       >
-        {content}
+        {contentToDisplay}
       </ReactMarkdown>
-    );
-  }, [content, showCursor, isUser, MarkdownComponents]);
+      {showCursor && !isUser && !isThinking && <TypingCursor />}
+    </>
+  );
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 15, scale: 0.98 }}
+      initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={spring}
       className={cn(
@@ -213,16 +242,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     >
       <div
         className={cn(
+          "relative max-w-full",
           isUser
             ? "bg-[#2f2f2f] text-zinc-100 px-5 py-3 rounded-[26px] rounded-tr-sm shadow-lg break-words overflow-x-auto"
-            : "w-full max-w-full"
+            : "w-full"
         )}
         style={isUser ? { maxWidth: "85%", wordBreak: "break-word", overflowWrap: "break-word" } : {}}
       >
-        <div className={cn("prose prose-invert max-w-none", isUser ? "text-[15px]" : "text-[16px]")}>
-          {renderedContent}
+        <div className={cn("prose prose-invert max-w-none w-full", isUser ? "text-[15px]" : "text-[16px]")}>
+          
+          {showReasoning && <Reasoning content={reasoningContent} isThinking={isThinking} />}
+
+          {(contentToDisplay.length > 0 || (!isThinking && !isUser)) && (
+             <div className="min-h-[1.5rem] w-full">
+               {renderedContent}
+             </div>
+          )}
+          
         </div>
       </div>
+
       {!isUser && (
         <motion.button
           initial={{ opacity: 0, scale: 0.8 }}
@@ -230,17 +269,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           onClick={handleCopy}
-          className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors text-sm w-fit"
-          title="Copy message"
+          className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-700 text-zinc-400 text-xs font-medium transition-colors self-start"
         >
           {copied ? (
             <>
-              <Check size={16} className="text-green-400" />
-              <span className="text-green-400">Copied!</span>
+              <Check size={14} className="text-emerald-400" />
+              <span className="text-emerald-400">Copied!</span>
             </>
           ) : (
             <>
-              <Copy size={16} />
+              <Copy size={14} />
+              <span>Copy</span>
             </>
           )}
         </motion.button>
