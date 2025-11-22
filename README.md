@@ -29,7 +29,7 @@ You must start a LM-Studio server.
 1. [**Download and Install LM-Studio**](https://lmstudio.ai/)
 2. **Download a Model**: you can download any model from their page or inside the app UI.
 3. **Start the Local Server**:
-    - Navigate to the Local Server tab (the icon that looks like </>).
+    - Navigate to the Local Server tab (the icon that looks like >_ ).
     - Select the model you downloaded from the dropdown menu.
     - Ensure the Server Port is set to 1234 (this is the default used by the app).
     - Click Start Server.
