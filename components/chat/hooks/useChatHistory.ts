@@ -1,7 +1,8 @@
 import { useCallback } from "react";
 import type { Message, ChatMetadata } from "../types";
 
-export const useChatHistory = (chatId: string) => {
+// FIXED: Accepts selectedModelId
+export const useChatHistory = (chatId: string, selectedModelId: string) => {
   const getChatMetadata = useCallback((): ChatMetadata[] => {
     try {
       return JSON.parse(localStorage.getItem("all_chats") || "[]");
@@ -10,8 +11,9 @@ export const useChatHistory = (chatId: string) => {
     }
   }, []);
 
+  // FIXED: Accepts modelId argument
   const generateChatTitle = useCallback(
-    async (messages: Message[]): Promise<string> => {
+    async (messages: Message[], modelId: string): Promise<string> => {
       const userMessage = messages.find((m) => m.role === "user");
       if (!userMessage) return "New Chat";
 
@@ -34,7 +36,8 @@ Rules:
 Title:`,
               },
             ],
-            model: "gpt-3.5-turbo",
+            // FIXED: Use the passed modelId, or fallback
+            model: modelId || "", 
           }),
         });
 
@@ -96,12 +99,14 @@ Title:`,
 
         // Only generate title once: if title is "New Chat", have 2+ messages, and this is the first time (only when AI just responded)
         if (title === "New Chat" && currentMessages.length >= 2 && shouldUpdateDate) {
-          title = await generateChatTitle(currentMessages);
+          // FIXED: Pass selectedModelId
+          title = await generateChatTitle(currentMessages, selectedModelId);
         }
       } else if (currentMessages.length > 0) {
         // New chat - only generate if we have 2+ messages and shouldUpdateDate is true (meaning AI just responded)
         if (currentMessages.length >= 2 && shouldUpdateDate) {
-          title = await generateChatTitle(currentMessages);
+          // FIXED: Pass selectedModelId
+          title = await generateChatTitle(currentMessages, selectedModelId);
         } else {
           title = "New Chat";
         }
@@ -118,7 +123,8 @@ Title:`,
       
       return sortedList;
     },
-    [chatId, getChatMetadata, generateChatTitle]
+    // FIXED: Add selectedModelId to dependencies
+    [chatId, getChatMetadata, generateChatTitle, selectedModelId] 
   );
 
   return { getChatMetadata, saveHistory };

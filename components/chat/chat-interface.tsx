@@ -92,7 +92,8 @@ export default function ChatInterface() {
   }, [urlChatId, router]);
 
   /* ---------- HOOKS ---------- */
-  const { getChatMetadata, saveHistory: saveHistoryBase } = useChatHistory(chatId);
+  // FIXED: Pass selectedModelId to useChatHistory
+  const { getChatMetadata, saveHistory: saveHistoryBase } = useChatHistory(chatId, selectedModelId);
 
   const { onSubmit: submitChat } = useChatSubmit({
     selectedModelId,
