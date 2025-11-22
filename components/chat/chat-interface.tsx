@@ -160,12 +160,43 @@ export default function ChatInterface() {
   }, [messages, isNewChat, saveHistoryBase, defaultModelId, router, chatList]);
 
   const deleteAllChats = useCallback(() => {
+    // 1. Delete all chat content from localStorage
     chatList.forEach((c) => localStorage.removeItem(`chat_${c.id}`));
-    localStorage.setItem("all_chats", "[]");
-    setChatList([]);
-    startNewChat();
+
+    // 2. Prepare the new chat ID
+    const newChatId = Date.now().toString();
+
+    // 3. Create the metadata for the *single* new chat placeholder
+    const newChat: ChatMetadata = {
+      id: newChatId,
+      title: "New Chat",
+      date: Date.now(),
+    };
+
+    // 4. Update localStorage and state with ONLY the new chat
+    // This ensures a clean slate and that only the placeholder exists
+    localStorage.setItem("all_chats", JSON.stringify([newChat]));
+    setChatList([newChat]);
+    
+    // 5. Clear current chat state and set new ID
+    setActiveMenuId(null);
+    setMessages([]);
+    setInput("");
+    setIsNewChat(true);
+    shouldAutoScrollRef.current = true;
+    
+    setChatId(newChatId);
+    chatIdRef.current = newChatId;
+    
+    if (defaultModelId) setSelectedModelId(defaultModelId);
+    
+    // 6. Force navigation to the new chat ID, triggering re-render/useEffect
+    router.push(`?chat=${newChatId}`);
+    
+    // 7. Close the settings modal and focus input
     setIsSettingsOpen(false);
-  }, [chatList, startNewChat]);
+    setTimeout(() => inputRef.current?.focus(), 300);
+}, [chatList, router, defaultModelId]);
 
   const deleteChat = useCallback(
     (e: React.MouseEvent, id: string) => {
