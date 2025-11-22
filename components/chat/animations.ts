@@ -8,7 +8,7 @@ export const getTransition = (enabled: boolean, speed: number): Transition => {
 
   // Base values (speed = 1)
   const baseStiffness = 400;
-  const baseDamping = 30;
+  const baseDamping = 25;
 
   // Adjust based on speed factor (higher speed = higher stiffness, lower damping)
   // Limiting speed influence to avoid breaking physics
@@ -23,8 +23,8 @@ export const getTransition = (enabled: boolean, speed: number): Transition => {
 
 export const layoutSpring: Transition = {
   type: "spring",
-  stiffness: 300,
-  damping: 30,
+  stiffness: 400,
+  damping: 20,
   mass: 1.2,
 };
 
