@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -21,18 +21,12 @@ interface MessageBubbleProps {
   showCursor?: boolean;
 }
 
-/**
- * Global spring configuration that satisfies `Transition`.
- */
 const spring: Transition = {
   type: "spring",
   stiffness: 400,
   damping: 30,
 };
 
-/**
- * Blinking cursor – kept the same but now typed as a proper Motion component.
- */
 const TypingCursor = () => (
   <motion.span
     aria-hidden="true"
@@ -62,8 +56,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  /* ---------- Markdown rendering helpers ---------- */
-  const MarkdownComponents: Record<string, React.FC<any>> = {
+  // Memoize the component definition so it doesn't re-create on every render
+  // This significantly improves performance during typing/streaming
+  const MarkdownComponents = useMemo<Record<string, React.FC<any>>>(() => ({
     p: ({ children }) => (
       <p className="mb-3 last:mb-0 leading-7 whitespace-pre-wrap break-words">
         {children}
@@ -153,62 +148,59 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       </tr>
     ),
     br: () => <br />,
-  };
+  }), []);
 
-  /* ---------- Content rendering logic ---------- */
-  const renderedContent = showCursor && !isUser
-    ? (() => {
-        // Live markdown streaming – unchanged from your original logic
-        const contentToParse = content;
-        let finalMarkdown = "";
-        let streamingChunk = "";
+  const renderedContent = useMemo(() => {
+    if (showCursor && !isUser) {
+      const contentToParse = content;
+      let finalMarkdown = "";
+      let streamingChunk = "";
 
-        const lastBlockBreakIndex = contentToParse.lastIndexOf("\n\n");
+      const lastBlockBreakIndex = contentToParse.lastIndexOf("\n\n");
 
-        if (lastBlockBreakIndex !== -1) {
-          finalMarkdown = contentToParse.substring(0, lastBlockBreakIndex);
-          streamingChunk = contentToParse.substring(lastBlockBreakIndex);
-        } else {
-          finalMarkdown = "";
-          streamingChunk = contentToParse;
-        }
+      if (lastBlockBreakIndex !== -1) {
+        finalMarkdown = contentToParse.substring(0, lastBlockBreakIndex);
+        streamingChunk = contentToParse.substring(lastBlockBreakIndex);
+      } else {
+        finalMarkdown = "";
+        streamingChunk = contentToParse;
+      }
 
-        return (
-          <>
-            {finalMarkdown.length > 0 && (
-              <div className="inline">
-                <ReactMarkdown
-                  components={MarkdownComponents}
-                  remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
-                  rehypePlugins={[rehypeHighlight, rehypeKatex]}
-                  key={finalMarkdown.length}
-                  skipHtml={false}
-                >
-                  {finalMarkdown}
-                </ReactMarkdown>
-              </div>
-            )}
+      return (
+        <>
+          {finalMarkdown.length > 0 && (
+            <div className="inline">
+              <ReactMarkdown
+                components={MarkdownComponents}
+                remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+                rehypePlugins={[rehypeHighlight, rehypeKatex]}
+                skipHtml={false}
+              >
+                {finalMarkdown}
+              </ReactMarkdown>
+            </div>
+          )}
 
-            <span className="whitespace-pre-wrap break-words leading-7 text-zinc-100 inline">
-              {streamingChunk}
-              <TypingCursor />
-            </span>
-          </>
-        );
-      })()
-    : (
-        // Non–streaming – normal Markdown
-        <ReactMarkdown
-          components={MarkdownComponents}
-          remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
-          rehypePlugins={[rehypeHighlight, rehypeKatex]}
-          skipHtml={false}
-        >
-          {content}
-        </ReactMarkdown>
+          <span className="whitespace-pre-wrap break-words leading-7 text-zinc-100 inline">
+            {streamingChunk}
+            <TypingCursor />
+          </span>
+        </>
       );
+    }
 
-  /* ---------- Render the bubble ---------- */
+    return (
+      <ReactMarkdown
+        components={MarkdownComponents}
+        remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+        rehypePlugins={[rehypeHighlight, rehypeKatex]}
+        skipHtml={false}
+      >
+        {content}
+      </ReactMarkdown>
+    );
+  }, [content, showCursor, isUser, MarkdownComponents]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 15, scale: 0.98 }}

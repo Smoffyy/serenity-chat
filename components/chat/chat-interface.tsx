@@ -9,7 +9,6 @@ import React, {
   useCallback,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { cn } from "@/lib/utils";
 
 import type { Message, ChatMetadata, ModelData } from "./types";
 import { Sidebar } from "./Sidebar";
@@ -30,12 +29,17 @@ export default function ChatInterface() {
   const [models, setModels] = useState<ModelData[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>("");
   const [defaultModelId, setDefaultModelId] = useState<string>("");
+  
   const [chatId, setChatId] = useState<string>("");
+  // Ref to track the active chat ID instantly for async operations
+  const chatIdRef = useRef<string>("");
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [generatingChatId, setGeneratingChatId] = useState<string | null>(null);
   const [chatList, setChatList] = useState<ChatMetadata[]>([]);
+  
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isNewChat, setIsNewChat] = useState(true);
@@ -57,8 +61,8 @@ export default function ChatInterface() {
   useEffect(() => {
     if (urlChatId) {
       setChatId(urlChatId);
-      setMessages([]);
-      setInput("");
+      chatIdRef.current = urlChatId; // Update ref immediately
+      
       shouldAutoScrollRef.current = true;
 
       const saved = localStorage.getItem(`chat_${urlChatId}`);
@@ -68,17 +72,21 @@ export default function ChatInterface() {
           setIsNewChat(false);
         } catch (e) {
           console.error("Error loading chat:", e);
+          setMessages([]);
           setIsNewChat(true);
         }
       } else {
+        setMessages([]);
         setIsNewChat(true);
       }
 
+      // Reset input focus
       setTimeout(() => inputRef.current?.focus(), 300);
     } else {
       // No chat in URL, create new chat
       const newChatId = Date.now().toString();
       setChatId(newChatId);
+      chatIdRef.current = newChatId;
       setMessages([]);
       setInput("");
       setIsNewChat(true);
@@ -88,17 +96,19 @@ export default function ChatInterface() {
 
   /* ---------- HOOKS ---------- */
   const { getChatMetadata, saveHistory: saveHistoryBase } = useChatHistory(chatId);
+
+  // Pass the ref to useChatSubmit so it knows the LIVE status of the UI
   const { onSubmit: submitChat } = useChatSubmit({
     selectedModelId,
     messages,
     setMessages,
     saveHistory: (msgs, shouldUpdateDate) => {
       const updatedList = saveHistoryBase(msgs, shouldUpdateDate);
-      setChatList(updatedList);
+      setChatList(updatedList || []);
     },
     setIsLoading,
     setGeneratingChatId,
-    currentChatId: chatId,
+    chatIdRef, // Passing the Ref instead of just the value
   });
 
   /* ---------- SETTINGS ---------- */
@@ -116,6 +126,7 @@ export default function ChatInterface() {
         return;
       }
 
+      // Save current chat before switching if needed
       if (messages.length > 0 && chatId !== id && !isNewChat) {
         saveHistoryBase(messages, false);
       }
@@ -135,6 +146,7 @@ export default function ChatInterface() {
     setInput("");
     setIsNewChat(true);
     shouldAutoScrollRef.current = true;
+    
     if (defaultModelId) setSelectedModelId(defaultModelId);
     
     router.push(`?chat=${newChatId}`);
@@ -198,6 +210,7 @@ export default function ChatInterface() {
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
+        // Pass the event as React.FormEvent since it's compatible for our usage
         submitChat(e as unknown as FormEvent, input, setInput);
       }
     },
@@ -266,6 +279,7 @@ export default function ChatInterface() {
       setIsCursorEnabled(true);
     }
 
+    // Fetch models
     fetch("/api/models")
       .then((res) => res.json())
       .then((data) => {
@@ -277,9 +291,12 @@ export default function ChatInterface() {
             data.data.some((m: ModelData) => m.id === savedDefaultModel)
           )
             initialModel = savedDefaultModel;
-          if (!selectedModelId) setSelectedModelId(initialModel);
+          
+          // Only set if not already set (prevents overwriting user selection on re-mounts)
+          setSelectedModelId((prev) => prev || initialModel);
         }
-      });
+      })
+      .catch(err => console.error("Failed to fetch models", err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -297,42 +314,22 @@ export default function ChatInterface() {
   useEffect(() => {
     if (isInitialState || !scrollContainerRef.current) return;
 
-    if (!isLoading && shouldAutoScrollRef.current) {
+    // If auto-scroll is enabled, snap to bottom on new messages
+    if (shouldAutoScrollRef.current) {
       scrollContainerRef.current.scrollTo({
         top: scrollContainerRef.current.scrollHeight,
-        behavior: "smooth",
+        behavior: isLoading ? "smooth" : "auto",
       });
     }
-
-    let animationFrameId: number;
-
-    const smoothScrollToBottom = () => {
-      if (shouldAutoScrollRef.current && scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTo({
-          top: scrollContainerRef.current.scrollHeight,
-          behavior: "smooth",
-        });
-      }
-      if (isLoading) {
-        animationFrameId = requestAnimationFrame(smoothScrollToBottom);
-      }
-    };
-
-    if (isLoading) {
-      animationFrameId = requestAnimationFrame(smoothScrollToBottom);
-    }
-
-    return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    };
-  }, [messages, isLoading, isInitialState]);
+  }, [messages, isLoading, isInitialState]); // Trigger on message updates
 
   /* ---------- AUTO FOCUS AFTER RESPONSE ---------- */
   useEffect(() => {
     if (!isLoading && messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role === "assistant") {
-        setTimeout(() => inputRef.current?.focus(), 100);
+        // Small delay to ensure DOM is ready
+        setTimeout(() => inputRef.current?.focus(), 50);
       }
     }
   }, [isLoading, messages]);
