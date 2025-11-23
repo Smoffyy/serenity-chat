@@ -3,7 +3,7 @@ import "./globals.css";
 
 
 export const metadata: Metadata = {
-  title: "Serenity Chat",
+  title: "Serenity Chat 💫",
   description: "Aesthetically Pleasing Front-end UI.",
 };
 
