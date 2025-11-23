@@ -37,9 +37,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   inputRef,
   animationsEnabled,
 }) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isLoading) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+      }
+      return;
+    }
+    onKeyDown(e);
+  };
+
   return (
     <motion.div
-      // Conditionally apply layout animation
       layout={animationsEnabled}
       className={cn(
         "bg-[var(--bg-primary)] select-none w-full z-20",
@@ -50,7 +59,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     >
       {isInitialState && (
         <motion.div
-          // Conditionally apply initial state animation
           initial={animationsEnabled ? { opacity: 0, y: 20 } : false}
           animate={{ opacity: 1, y: 0 }}
           exit={animationsEnabled ? { opacity: 0, y: -20 } : false}
@@ -105,15 +113,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             ref={inputRef}
             value={input}
             onChange={onInputChange}
-            onKeyDown={(e) => {
-              if (isLoading) {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                }
-                return;
-              }
-              onKeyDown(e);
-            }}
+            onKeyDown={handleKeyDown}
             onKeyUp={onKeyUp}
             onFocus={onFocus}
             onBlur={onBlur}
@@ -170,7 +170,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] cursor-not-allowed",
                   isInitialState ? "mb-0" : "mb-0.5"
                 )}
-                // Conditionally apply submit button animation
                 whileTap={
                   animationsEnabled && input.trim()
                     ? { scale: 0.85, rotate: 10 }

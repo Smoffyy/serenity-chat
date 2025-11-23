@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, Children } from "react";
+import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -23,82 +23,95 @@ interface CodeBlockProps {
 }
 
 const getCodeContent = (children: React.ReactNode): string => {
-    if (Array.isArray(children)) {
-        return children.map(child => {
-            if (typeof child === 'string') return child;
-            if (React.isValidElement(child) && child.props.children) {
-                return getCodeContent(child.props.children);
-            }
-            return '';
-        }).join('');
-    }
-    if (typeof children === 'string') {
-        return children;
-    }
-    return '';
-}
-
-const CodeBlock: React.FC<CodeBlockProps> = ({ children, className, inline, ...props }) => {
-  const [copied, setCopied] = useState(false);
-  
-  const codeContent = getCodeContent(children).trim(); 
-  
-  const match = /language-(\w+)/.exec(className || "");
-  const language = match ? match[1] : '';
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(codeContent);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  if (inline) {
-    return (
-      <code className={cn(className, "break-words whitespace-pre-wrap")} {...props}>
-        {children}
-      </code>
-    );
+  if (Array.isArray(children)) {
+    return children
+      .map((child) => {
+        if (typeof child === "string") return child;
+        if (React.isValidElement(child) && child.props.children) {
+          return getCodeContent(child.props.children);
+        }
+        return "";
+      })
+      .join("");
   }
-
-  return (
-    <div className="relative group/code my-4 rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 bg-zinc-800/80 text-xs font-mono text-zinc-400 border-b border-zinc-700/50">
-        <span className="capitalize">{language || 'code'}</span>
-        <motion.button
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300 transition-colors"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          {copied ? (
-            <>
-              <Check size={14} className="text-emerald-400" />
-              <span className="text-emerald-400">Copied!</span>
-            </>
-          ) : (
-            <>
-              <Copy size={14} />
-              <span>Copy Code</span>
-            </>
-          )}
-        </motion.button>
-      </div>
-      <pre className="p-4 bg-zinc-900 overflow-x-auto">
-        <code className={cn(className, "break-words whitespace-pre-wrap")} {...props}>
-          {children}
-        </code>
-      </pre>
-    </div>
-  );
+  if (typeof children === "string") {
+    return children;
+  }
+  return "";
 };
 
+const CodeBlock: React.FC<CodeBlockProps> = memo(
+  ({ children, className, inline, ...props }) => {
+    const [copied, setCopied] = useState(false);
+
+    const codeContent = getCodeContent(children).trim();
+
+    const match = /language-(\w+)/.exec(className || "");
+    const language = match ? match[1] : "";
+
+    const handleCopy = useCallback(() => {
+      navigator.clipboard.writeText(codeContent).then(
+        () => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        },
+        () => console.error("Failed to copy code")
+      );
+    }, [codeContent]);
+
+    if (inline) {
+      return (
+        <code
+          className={cn(className, "break-words whitespace-pre-wrap")}
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    }
+
+    return (
+      <div className="relative group/code my-4 rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2 bg-zinc-800/80 text-xs font-mono text-zinc-400 border-b border-zinc-700/50">
+          <span className="capitalize">{language || "code"}</span>
+          <motion.button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-zinc-700/50 hover:bg-zinc-700 text-zinc-300 transition-colors"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            type="button"
+          >
+            {copied ? (
+              <>
+                <Check size={14} className="text-emerald-400" />
+                <span className="text-emerald-400">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy size={14} />
+                <span>Copy Code</span>
+              </>
+            )}
+          </motion.button>
+        </div>
+        <pre className="p-4 bg-zinc-900 overflow-x-auto">
+          <code className={cn(className, "break-words whitespace-pre-wrap")} {...props}>
+            {children}
+          </code>
+        </pre>
+      </div>
+    );
+  }
+);
+
+CodeBlock.displayName = "CodeBlock";
 
 interface ReasoningProps {
   content: string;
-  isThinking: boolean; 
+  isThinking: boolean;
 }
 
-const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
+const Reasoning: React.FC<ReasoningProps> = memo(({ content, isThinking }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -110,11 +123,16 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
 
   if (!content) return null;
 
+  const toggleExpanded = useCallback(() => {
+    setIsExpanded((prev) => !prev);
+  }, []);
+
   return (
     <div className="mb-2 w-full">
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={toggleExpanded}
         className="flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors select-none mb-1"
+        type="button"
       >
         {isThinking ? (
           <Loader2 size={12} className="animate-spin text-[var(--accent-color)]" />
@@ -166,20 +184,20 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
               className="h-24 overflow-hidden relative bg-[var(--bg-tertiary)]/20 rounded-lg border border-[var(--border-color)] w-full"
             >
               <div className="absolute inset-0 bg-gradient-to-b from-[var(--bg-primary)]/90 via-transparent to-transparent z-10 pointer-events-none h-12" />
-              
+
               <div className="p-3 text-xs text-[var(--text-secondary)] font-mono leading-relaxed min-h-full flex flex-col justify-end">
-                 <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkBreaks]}
-                    components={{
-                      p: ({ children }) => (
-                        <div className="mb-2 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
-                          {children}
-                        </div>
-                      ),
-                    }}
-                 >
-                    {content}
-                 </ReactMarkdown>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    p: ({ children }) => (
+                      <div className="mb-2 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
+                        {children}
+                      </div>
+                    ),
+                  }}
+                >
+                  {content}
+                </ReactMarkdown>
               </div>
             </div>
           </motion.div>
@@ -187,9 +205,12 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
       </AnimatePresence>
     </div>
   );
-};
+});
+
+Reasoning.displayName = "Reasoning";
 
 interface MessageBubbleProps {
+  id: string;
   role: "user" | "assistant";
   content: string;
   isGenerating?: boolean;
@@ -201,30 +222,35 @@ const spring: Transition = {
   damping: 30,
 };
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({
-  role,
-  content,
-  isGenerating = false,
-}) => {
-  const isUser = role === "user";
-  const [copied, setCopied] = useState(false);
+export const MessageBubble: React.FC<MessageBubbleProps> = memo(
+  ({ id, role, content, isGenerating = false }) => {
+    const isUser = role === "user";
+    const [copied, setCopied] = useState(false);
 
-  const { reasoningContent, mainContent } = parseReasoning(content);
+    const { reasoningContent, mainContent } = parseReasoning(content);
 
-  const isThinking = isGenerating && !isUser && reasoningContent.length > 0 && mainContent.trim().length === 0;
-  const showReasoning = !isUser && reasoningContent.length > 0;
-  const contentToDisplay = mainContent.trim();
-  
-  const showMainCopyButton = !isUser && !isGenerating && contentToDisplay.length > 0;
+    const isThinking =
+      isGenerating &&
+      !isUser &&
+      reasoningContent.length > 0 &&
+      mainContent.trim().length === 0;
+    const showReasoning = !isUser && reasoningContent.length > 0;
+    const contentToDisplay = mainContent.trim();
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(contentToDisplay || reasoningContent);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+    const showMainCopyButton =
+      !isUser && !isGenerating && contentToDisplay.length > 0;
 
-  const renderedContent = (
-    <>
+    const handleCopy = useCallback(() => {
+      navigator.clipboard.writeText(contentToDisplay || reasoningContent).then(
+        () => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        },
+        () => console.error("Failed to copy message")
+      );
+    }, [contentToDisplay, reasoningContent]);
+
+    const renderedContent = (
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
         rehypePlugins={[rehypeHighlight, rehypeKatex]}
@@ -235,7 +261,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           ),
           ul: ({ children }) => (
-            <ul className="list-disc list-outside space-y-1 mb-4 pl-5">{children}</ul>
+            <ul className="list-disc list-outside space-y-1 mb-4 pl-5">
+              {children}
+            </ul>
           ),
           ol: ({ children }) => (
             <ol className="list-decimal list-outside space-y-1 mb-4 pl-5">
@@ -243,7 +271,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </ol>
           ),
           h1: ({ children }) => (
-            <h1 className="text-2xl font-bold mt-6 mb-4 text-[var(--text-primary)]">{children}</h1>
+            <h1 className="text-2xl font-bold mt-6 mb-4 text-[var(--text-primary)]">
+              {children}
+            </h1>
           ),
           h2: ({ children }) => (
             <h2 className="text-xl font-bold mt-5 mb-3 text-[var(--text-primary)] border-b border-[var(--border-color)] pb-2">
@@ -251,7 +281,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-lg font-bold mt-4 mb-2 text-[var(--text-primary)]">{children}</h3>
+            <h3 className="text-lg font-bold mt-4 mb-2 text-[var(--text-primary)]">
+              {children}
+            </h3>
           ),
           a: ({ href, children }) => (
             <a
@@ -271,7 +303,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           code: (props) => <CodeBlock {...props} />,
           table: ({ children }) => (
             <div className="w-full overflow-x-auto my-4 rounded-lg border border-[var(--border-color)]">
-              <table className="w-full text-sm text-left border-collapse">{children}</table>
+              <table className="w-full text-sm text-left border-collapse">
+                {children}
+              </table>
             </div>
           ),
           th: ({ children }) => (
@@ -293,63 +327,76 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       >
         {contentToDisplay}
       </ReactMarkdown>
-    </>
-  );
+    );
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={spring}
-      className={cn(
-        "w-full py-2",
-        isUser ? "flex justify-end" : "flex flex-col justify-start"
-      )}
-    >
-      <div
-        className={cn(
-          "relative max-w-full",
-          isUser
-            ? "bg-[var(--user-msg-bg)] text-[var(--text-primary)] px-5 py-3 rounded-[26px] rounded-tr-sm shadow-lg break-words overflow-x-auto"
-            : "w-full"
-        )}
-        style={isUser ? { maxWidth: "85%", wordBreak: "break-word", overflowWrap: "break-word" } : {}}
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={spring}
+        className={cn("w-full py-2", isUser ? "flex justify-end" : "flex flex-col justify-start")}
       >
-        <div className={cn("prose prose-invert max-w-none w-full", isUser ? "text-[15px]" : "text-[16px]")}>
-          
-          {showReasoning && <Reasoning content={reasoningContent} isThinking={isThinking} />}
-
-          {(contentToDisplay.length > 0 || (!isThinking && !isUser)) && (
-             <div className="min-h-[1.5rem] w-full">
-               {renderedContent}
-             </div>
+        <div
+          className={cn(
+            "relative max-w-full",
+            isUser
+              ? "bg-[var(--user-msg-bg)] text-[var(--text-primary)] px-5 py-3 rounded-[26px] rounded-tr-sm shadow-lg break-words overflow-x-auto"
+              : "w-full"
           )}
-          
-        </div>
-      </div>
-
-      {showMainCopyButton && (
-        <motion.button
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={handleCopy}
-          className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--border-color)] text-[var(--text-secondary)] text-xs font-medium transition-colors self-start"
+          style={
+            isUser
+              ? { maxWidth: "85%", wordBreak: "break-word", overflowWrap: "break-word" }
+              : {}
+          }
         >
-          {copied ? (
-            <>
-              <Check size={14} className="text-emerald-400" />
-              <span className="text-emerald-400">Copied!</span>
-            </>
-          ) : (
-            <>
-              <Copy size={14} />
-              <span>Copy</span>
-            </>
-          )}
-        </motion.button>
-      )}
-    </motion.div>
-  );
-};
+          <div
+            className={cn(
+              "prose prose-invert max-w-none w-full",
+              isUser ? "text-[15px]" : "text-[16px]"
+            )}
+          >
+            {showReasoning && <Reasoning content={reasoningContent} isThinking={isThinking} />}
+
+            {(contentToDisplay.length > 0 || (!isThinking && !isUser)) && (
+              <div className="min-h-[1.5rem] w-full">{renderedContent}</div>
+            )}
+          </div>
+        </div>
+
+        {showMainCopyButton && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleCopy}
+            className="flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--border-color)] text-[var(--text-secondary)] text-xs font-medium transition-colors self-start"
+            type="button"
+          >
+            {copied ? (
+              <>
+                <Check size={14} className="text-emerald-400" />
+                <span className="text-emerald-400">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy size={14} />
+                <span>Copy</span>
+              </>
+            )}
+          </motion.button>
+        )}
+      </motion.div>
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.content === next.content &&
+      prev.role === next.role &&
+      prev.isGenerating === next.isGenerating &&
+      prev.id === next.id
+    );
+  }
+);
+
+MessageBubble.displayName = "MessageBubble";

@@ -43,14 +43,6 @@ const BouncingLoader = () => {
   );
 };
 
-const MemoizedMessageBubble = memo(MessageBubble, (prev, next) => {
-  return (
-    prev.content === next.content &&
-    prev.role === next.role &&
-    prev.isGenerating === next.isGenerating
-  );
-});
-
 export const ChatMessages: React.FC<ChatMessagesProps> = ({
   messages,
   isLoading,
@@ -64,7 +56,6 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
       className={cn(
         "flex-1 flex flex-col relative z-10 overflow-hidden",
         isInitialState ? "justify-center items-center" : "justify-end",
-        // Only apply transition class if animations are enabled
         animationsEnabled && "transition-all duration-500 ease-in-out"
       )}
     >
@@ -79,15 +70,16 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
         <div className="max-w-4xl mx-auto px-4">
           <AnimatePresence initial={false}>
             {messages.map((m) => (
-              <MemoizedMessageBubble
+              <MessageBubble
                 key={m.id}
-                {...m}
+                id={m.id}
+                role={m.role}
+                content={m.content}
                 isGenerating={
                   isLoading &&
                   m.id === messages[messages.length - 1]?.id &&
                   m.role === "assistant"
                 }
-                // Pass animationsEnabled down if MessageBubble needs it (it doesn't currently use it for entry)
               />
             ))}
           </AnimatePresence>
@@ -96,10 +88,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             messages.length > 0 &&
             messages[messages.length - 1]?.role === "user" && (
               <div className="flex justify-start w-full py-2">
-                  <div className="px-4 py-2 bg-[var(--bg-secondary)] rounded-[26px] rounded-tl-sm">
-                    {/* Only animate the loader if enabled */}
-                    {animationsEnabled ? <BouncingLoader /> : <span className="text-sm text-[var(--text-secondary)]">Thinking...</span>}
-                  </div>
+                <div className="px-4 py-2 bg-[var(--bg-secondary)] rounded-[26px] rounded-tl-sm">
+                  {animationsEnabled ? (
+                    <BouncingLoader />
+                  ) : (
+                    <span className="text-sm text-[var(--text-secondary)]">
+                      Thinking...
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
@@ -110,7 +107,6 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
       <AnimatePresence>
         {isInitialState && (
           <motion.div
-            // Conditionally apply animation props based on setting
             initial={animationsEnabled ? { opacity: 0, y: 20 } : false}
             animate={{ opacity: 1, y: 0 }}
             exit={animationsEnabled ? { opacity: 0, y: -20 } : false}

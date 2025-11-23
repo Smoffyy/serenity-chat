@@ -85,7 +85,7 @@ export default function ChatInterface() {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
 
-  // Settings State
+  // Settings State - Initialize with defaults
   const [settings, setSettings] = useState<AppSettings>({
     theme: "dark",
     animationsEnabled: true,
@@ -122,17 +122,17 @@ export default function ChatInterface() {
 
       shouldAutoScrollRef.current = true;
 
-      const saved = localStorage.getItem(`chat_${urlChatId}`);
-      if (saved) {
-        try {
+      try {
+        const saved = localStorage.getItem(`chat_${urlChatId}`);
+        if (saved) {
           setMessages(JSON.parse(saved));
           setIsNewChat(false);
-        } catch (e) {
-          console.error("Error loading chat:", e);
+        } else {
           setMessages([]);
           setIsNewChat(true);
         }
-      } else {
+      } catch (e) {
+        console.error("Error loading chat:", e);
         setMessages([]);
         setIsNewChat(true);
       }
@@ -169,26 +169,32 @@ export default function ChatInterface() {
     chatIdRef,
   });
 
-  // When URL changes (switching chats), reload messages from storage and check if generating
+  // When URL changes (switching chats), reload messages from storage
   useEffect(() => {
     if (urlChatId && urlChatId !== chatId) {
-      const saved = localStorage.getItem(`chat_${urlChatId}`);
-      if (saved) {
-        try {
+      try {
+        const saved = localStorage.getItem(`chat_${urlChatId}`);
+        if (saved) {
           setMessages(JSON.parse(saved));
-        } catch (e) {
-          console.error("Error loading chat:", e);
+        } else {
           setMessages([]);
         }
+      } catch (e) {
+        console.error("Error loading chat:", e);
+        setMessages([]);
       }
     }
-  }, [urlChatId, chatId, setMessages]);
+  }, [urlChatId, chatId]);
 
   /* ---------- SETTINGS HANDLERS ---------- */
   const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
     setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
-      localStorage.setItem("app_settings", JSON.stringify(updated));
+      try {
+        localStorage.setItem("app_settings", JSON.stringify(updated));
+      } catch (e) {
+        console.error("Error saving settings:", e);
+      }
       return updated;
     });
   }, []);
@@ -202,7 +208,9 @@ export default function ChatInterface() {
       }
 
       if (messages.length > 0 && chatId !== id && !isNewChat) {
-        saveHistoryBase(messages, false);
+        saveHistoryBase(messages, false).catch(e => 
+          console.error("Error saving chat before loading new one:", e)
+        );
       }
 
       setActiveMenuId(null);
@@ -212,7 +220,11 @@ export default function ChatInterface() {
   );
 
   const startNewChat = useCallback(() => {
-    if (messages.length > 0 && !isNewChat) saveHistoryBase(messages, false);
+    if (messages.length > 0 && !isNewChat) {
+      saveHistoryBase(messages, false).catch(e =>
+        console.error("Error saving chat on new chat:", e)
+      );
+    }
 
     const newChatId = Date.now().toString();
     setActiveMenuId(null);
@@ -230,51 +242,70 @@ export default function ChatInterface() {
     };
     const updatedList = [newChat, ...(chatList || [])];
     setChatList(updatedList);
-    localStorage.setItem("all_chats", JSON.stringify(updatedList));
+    
+    try {
+      localStorage.setItem("all_chats", JSON.stringify(updatedList));
+    } catch (e) {
+      console.error("Error saving chat list:", e);
+    }
 
     router.push(`?chat=${newChatId}`);
     setTimeout(() => inputRef.current?.focus(), 300);
   }, [messages, isNewChat, saveHistoryBase, defaultModelId, router, chatList]);
 
   const deleteAllChats = useCallback(() => {
-    chatList.forEach((c) => localStorage.removeItem(`chat_${c.id}`));
+    try {
+      chatList.forEach((c) => {
+        try {
+          localStorage.removeItem(`chat_${c.id}`);
+        } catch (e) {
+          console.error(`Error deleting chat ${c.id}:`, e);
+        }
+      });
 
-    const newChatId = Date.now().toString();
-    const newChat: ChatMetadata = {
-      id: newChatId,
-      title: "New Chat",
-      date: Date.now(),
-    };
+      const newChatId = Date.now().toString();
+      const newChat: ChatMetadata = {
+        id: newChatId,
+        title: "New Chat",
+        date: Date.now(),
+      };
 
-    localStorage.setItem("all_chats", JSON.stringify([newChat]));
-    setChatList([newChat]);
+      localStorage.setItem("all_chats", JSON.stringify([newChat]));
+      setChatList([newChat]);
 
-    setActiveMenuId(null);
-    setMessages([]);
-    setInput("");
-    setIsNewChat(true);
-    shouldAutoScrollRef.current = true;
+      setActiveMenuId(null);
+      setMessages([]);
+      setInput("");
+      setIsNewChat(true);
+      shouldAutoScrollRef.current = true;
 
-    setChatId(newChatId);
-    chatIdRef.current = newChatId;
+      setChatId(newChatId);
+      chatIdRef.current = newChatId;
 
-    if (defaultModelId) setSelectedModelId(defaultModelId);
+      if (defaultModelId) setSelectedModelId(defaultModelId);
 
-    router.push(`?chat=${newChatId}`);
-    setIsSettingsOpen(false);
-    setTimeout(() => inputRef.current?.focus(), 300);
+      router.push(`?chat=${newChatId}`);
+      setIsSettingsOpen(false);
+      setTimeout(() => inputRef.current?.focus(), 300);
+    } catch (e) {
+      console.error("Error deleting all chats:", e);
+    }
   }, [chatList, router, defaultModelId]);
 
   const deleteChat = useCallback(
     (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
-      localStorage.removeItem(`chat_${id}`);
+      try {
+        localStorage.removeItem(`chat_${id}`);
 
-      const updatedList = chatList.filter((c) => c.id !== id);
-      localStorage.setItem("all_chats", JSON.stringify(updatedList));
-      setChatList(updatedList);
+        const updatedList = chatList.filter((c) => c.id !== id);
+        localStorage.setItem("all_chats", JSON.stringify(updatedList));
+        setChatList(updatedList);
 
-      if (chatId === id) startNewChat();
+        if (chatId === id) startNewChat();
+      } catch (e) {
+        console.error("Error deleting chat:", e);
+      }
     },
     [chatId, chatList, startNewChat]
   );
@@ -284,7 +315,11 @@ export default function ChatInterface() {
       e.stopPropagation();
       const newDefault = defaultModelId === modelId ? "" : modelId;
       setDefaultModelId(newDefault);
-      localStorage.setItem("default_model", newDefault);
+      try {
+        localStorage.setItem("default_model", newDefault);
+      } catch (e) {
+        console.error("Error saving default model:", e);
+      }
     },
     [defaultModelId]
   );
@@ -320,7 +355,9 @@ export default function ChatInterface() {
   );
 
   const handleKeyUp = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Shift") setIsShiftPressed(false);
+    if (e.key === "Shift") {
+      // Handle if needed
+    }
   }, []);
 
   /* ---------- EFFECTS ---------- */
@@ -370,21 +407,26 @@ export default function ChatInterface() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Initialize app state and load settings/models
   useEffect(() => {
     setChatList(getChatMetadata());
 
-    const savedDefaultModel = localStorage.getItem("default_model") || "";
-    setDefaultModelId(savedDefaultModel);
+    try {
+      const savedDefaultModel = localStorage.getItem("default_model") || "";
+      setDefaultModelId(savedDefaultModel);
 
-    // Load Settings
-    const savedSettingsStr = localStorage.getItem("app_settings");
-    if (savedSettingsStr) {
-      try {
-        const savedSettings = JSON.parse(savedSettingsStr);
-        setSettings((prev) => ({ ...prev, ...savedSettings }));
-      } catch (e) {
-        console.error("Failed to parse saved settings", e);
+      // Load Settings
+      const savedSettingsStr = localStorage.getItem("app_settings");
+      if (savedSettingsStr) {
+        try {
+          const savedSettings = JSON.parse(savedSettingsStr);
+          setSettings((prev) => ({ ...prev, ...savedSettings }));
+        } catch (e) {
+          console.error("Failed to parse saved settings", e);
+        }
       }
+    } catch (e) {
+      console.error("Error loading settings from localStorage:", e);
     }
 
     fetch("/api/models")
@@ -393,18 +435,25 @@ export default function ChatInterface() {
         if (data.data?.length) {
           setModels(data.data);
           let initialModel = data.data[0].id;
-          if (
-            savedDefaultModel &&
-            data.data.some((m: ModelData) => m.id === savedDefaultModel)
-          )
-            initialModel = savedDefaultModel;
+          
+          // Validate default model exists in current models list
+          try {
+            const savedDefaultModel = localStorage.getItem("default_model") || "";
+            if (
+              savedDefaultModel &&
+              data.data.some((m: ModelData) => m.id === savedDefaultModel)
+            ) {
+              initialModel = savedDefaultModel;
+            }
+          } catch (e) {
+            console.error("Error validating default model:", e);
+          }
 
           setSelectedModelId((prev) => prev || initialModel);
         }
       })
       .catch((err) => console.error("Failed to fetch models", err));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [getChatMetadata]);
 
   /* ---------- SCROLL LOGIC ---------- */
   const handleScroll = useCallback(() => {
@@ -421,7 +470,6 @@ export default function ChatInterface() {
     if (isInitialState || !scrollContainerRef.current) return;
 
     if (shouldAutoScrollRef.current) {
-      // Only animate scroll if animations are enabled
       const behavior = isLoading && settings.animationsEnabled ? "smooth" : "auto";
       scrollContainerRef.current.scrollTo({
         top: scrollContainerRef.current.scrollHeight,
@@ -461,7 +509,12 @@ export default function ChatInterface() {
         const filtered = (chatList || []).filter((c) => c.id !== chatId);
         const updatedList = [newChat, ...filtered];
         setChatList(updatedList);
-        localStorage.setItem("all_chats", JSON.stringify(updatedList));
+        
+        try {
+          localStorage.setItem("all_chats", JSON.stringify(updatedList));
+        } catch (e) {
+          console.error("Error saving new chat to list:", e);
+        }
       }
 
       await submitChat(e, input, setInput);

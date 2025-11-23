@@ -4,8 +4,10 @@ import type { Message, ChatMetadata } from "../types";
 export const useChatHistory = (chatId: string, selectedModelId: string) => {
   const getChatMetadata = useCallback((): ChatMetadata[] => {
     try {
-      return JSON.parse(localStorage.getItem("all_chats") || "[]");
-    } catch {
+      const stored = localStorage.getItem("all_chats");
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      console.error("Error parsing chat metadata:", e);
       return [];
     }
   }, []);
@@ -69,7 +71,7 @@ Title:`,
         }
 
         const cleanedTitle = title.trim().replace(/^Title:\s*/i, "").trim();
-        return cleanedTitle.slice(0, 60) || "New Chat"; // Cap at 60 chars
+        return cleanedTitle.slice(0, 60) || "New Chat";
       } catch (err) {
         console.error("Error generating title:", err);
         return "New Chat";
@@ -80,10 +82,14 @@ Title:`,
 
   const saveHistory = useCallback(
     async (currentMessages: Message[], targetChatId: string, shouldUpdateDate = false): Promise<ChatMetadata[]> => {
-      // Use targetChatId instead of the hook's chatId for background updates
       if (currentMessages.length === 0) return getChatMetadata();
 
-      localStorage.setItem(`chat_${targetChatId}`, JSON.stringify(currentMessages));
+      try {
+        localStorage.setItem(`chat_${targetChatId}`, JSON.stringify(currentMessages));
+      } catch (e) {
+        console.error("Error saving chat to localStorage:", e);
+        return getChatMetadata();
+      }
 
       const currentList = getChatMetadata();
       const existingIndex = currentList.findIndex((c) => c.id === targetChatId);
@@ -115,17 +121,24 @@ Title:`,
           : [newMeta, ...currentList];
 
       const sortedList = updatedList.sort((a, b) => b.date - a.date);
-      localStorage.setItem("all_chats", JSON.stringify(sortedList));
+      
+      try {
+        localStorage.setItem("all_chats", JSON.stringify(sortedList));
+      } catch (e) {
+        console.error("Error saving chat list to localStorage:", e);
+      }
       
       return sortedList;
     },
     [getChatMetadata, generateChatTitle, selectedModelId] 
   );
   
-  // Expose a wrapper to match the original function signature for current chat usage
-  const saveCurrentChatHistory = useCallback((currentMessages: Message[], shouldUpdateDate = false) => {
+  const saveCurrentChatHistory = useCallback(
+    (currentMessages: Message[], shouldUpdateDate = false) => {
       return saveHistory(currentMessages, chatId, shouldUpdateDate);
-  }, [chatId, saveHistory]);
+    }, 
+    [chatId, saveHistory]
+  );
 
-  return { getChatMetadata, saveHistory: saveCurrentChatHistory };
+  return { getChatMetadata, saveHistory: saveCurrentChatHistory, generateChatTitle };
 };
