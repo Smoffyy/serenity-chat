@@ -52,7 +52,6 @@ const themeDefinitions: Record<Theme, Record<string, string>> = {
     "--text-primary": "#ececf1",
     "--text-secondary": "#c5c5d2",
     "--border-color": "#4d4d4f80",
-    //"--accent-color": "#10a37f",
     "--accent-color": "#ffffffff",
     "--input-bg": "#303030",
     "--user-msg-bg": "#303030", 
@@ -156,7 +155,7 @@ export default function ChatInterface() {
     selectedModelId
   );
 
-  const { onSubmit: submitChat } = useChatSubmit({
+  const { onSubmit: submitChat, onStop: stopChat } = useChatSubmit({
     selectedModelId,
     messages,
     setMessages,
@@ -169,6 +168,21 @@ export default function ChatInterface() {
     setGeneratingChatId,
     chatIdRef,
   });
+
+  // When URL changes (switching chats), reload messages from storage and check if generating
+  useEffect(() => {
+    if (urlChatId && urlChatId !== chatId) {
+      const saved = localStorage.getItem(`chat_${urlChatId}`);
+      if (saved) {
+        try {
+          setMessages(JSON.parse(saved));
+        } catch (e) {
+          console.error("Error loading chat:", e);
+          setMessages([]);
+        }
+      }
+    }
+  }, [urlChatId, chatId, setMessages]);
 
   /* ---------- SETTINGS HANDLERS ---------- */
   const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
@@ -523,7 +537,7 @@ export default function ChatInterface() {
 
           <ChatInput
             input={input}
-            isLoading={isLoading}
+            isLoading={isLoading && generatingChatId === chatId}
             isInitialState={isInitialState}
             isInputFocused={isInputFocused}
             onInputChange={handleInputTextChange}
@@ -532,6 +546,7 @@ export default function ChatInterface() {
             onFocus={() => setIsInputFocused(true)}
             onBlur={() => setIsInputFocused(false)}
             onSubmit={handleSubmit}
+            onStop={stopChat}
             inputRef={inputRef}
             animationsEnabled={settings.animationsEnabled}
           />

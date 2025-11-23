@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { Send, Loader2, Terminal } from "lucide-react";
+import { Send, Loader2, Terminal, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { inputGlowVariants } from "./animations";
 
@@ -17,6 +17,7 @@ interface ChatInputProps {
   onFocus: () => void;
   onBlur: () => void;
   onSubmit: (e: React.FormEvent) => void;
+  onStop: () => void;
   inputRef: React.RefObject<HTMLTextAreaElement>;
   animationsEnabled: boolean;
 }
@@ -32,6 +33,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onFocus,
   onBlur,
   onSubmit,
+  onStop,
   inputRef,
   animationsEnabled,
 }) => {
@@ -82,7 +84,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         )}
 
         <form
-          onSubmit={onSubmit}
+          onSubmit={(e) => {
+            if (isLoading) {
+              e.preventDefault();
+              return;
+            }
+            onSubmit(e);
+          }}
           className={cn(
             "relative flex flex-col bg-[var(--input-bg)] border rounded-[28px] shadow-2xl transition-all overflow-hidden",
             isLoading
@@ -97,7 +105,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             ref={inputRef}
             value={input}
             onChange={onInputChange}
-            onKeyDown={onKeyDown}
+            onKeyDown={(e) => {
+              if (isLoading) {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                }
+                return;
+              }
+              onKeyDown(e);
+            }}
             onKeyUp={onKeyUp}
             onFocus={onFocus}
             onBlur={onBlur}
@@ -110,7 +126,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             }
             rows={1}
             wrap="off"
-            disabled={isLoading}
+            disabled={false}
             className={cn(
               "w-full bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] text-base focus:outline-none max-h-[200px] overflow-hidden leading-relaxed max-w-full transition-all",
               isInitialState
@@ -131,33 +147,39 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               isInitialState ? "px-2 pb-2 pt-0" : "px-3 pb-3 pt-1"
             )}
           >
-            <motion.button
-              type="submit"
-              disabled={isLoading || !input.trim()}
-              className={cn(
-                "p-2 rounded-full transition-all duration-200",
-                input.trim()
-                  ? "bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/90 shadow-md"
-                  : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] cursor-not-allowed",
-                isInitialState ? "mb-0" : "mb-0.5"
-              )}
-              // Conditionally apply submit button animation
-              whileTap={
-                animationsEnabled && !isLoading && input.trim()
-                  ? { scale: 0.85, rotate: 10 }
-                  : undefined
-              }
-            >
-              {isLoading ? (
-                <Loader2
-                  size={16}
-                  className={animationsEnabled ? "animate-spin" : ""}
-                  strokeWidth={2.5}
-                />
-              ) : (
+            {isLoading ? (
+              <motion.button
+                type="button"
+                onClick={onStop}
+                className={cn(
+                  "p-2 rounded-full transition-all duration-200 bg-red-600 hover:bg-red-700 text-white shadow-md"
+                )}
+                whileTap={animationsEnabled ? { scale: 0.85 } : undefined}
+                title="Stop generation"
+              >
+                <Square size={16} strokeWidth={2.5} fill="currentColor" />
+              </motion.button>
+            ) : (
+              <motion.button
+                type="submit"
+                disabled={!input.trim()}
+                className={cn(
+                  "p-2 rounded-full transition-all duration-200",
+                  input.trim()
+                    ? "bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/90 shadow-md"
+                    : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] cursor-not-allowed",
+                  isInitialState ? "mb-0" : "mb-0.5"
+                )}
+                // Conditionally apply submit button animation
+                whileTap={
+                  animationsEnabled && input.trim()
+                    ? { scale: 0.85, rotate: 10 }
+                    : undefined
+                }
+              >
                 <Send size={16} strokeWidth={2.5} />
-              )}
-            </motion.button>
+              </motion.button>
+            )}
           </div>
         </form>
 
