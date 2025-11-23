@@ -79,35 +79,36 @@ Title:`,
   );
 
   const saveHistory = useCallback(
-    async (currentMessages: Message[], shouldUpdateDate = false): Promise<ChatMetadata[]> => {
+    async (currentMessages: Message[], targetChatId: string, shouldUpdateDate = false): Promise<ChatMetadata[]> => {
+      // Use targetChatId instead of the hook's chatId for background updates
       if (currentMessages.length === 0) return getChatMetadata();
 
-      localStorage.setItem(`chat_${chatId}`, JSON.stringify(currentMessages));
+      localStorage.setItem(`chat_${targetChatId}`, JSON.stringify(currentMessages));
 
       const currentList = getChatMetadata();
-      const existingIndex = currentList.findIndex((c) => c.id === chatId);
+      const existingIndex = currentList.findIndex((c) => c.id === targetChatId);
 
       let title = "New Chat";
       let date = Date.now();
+      
+      const shouldGenerateTitle = 
+        shouldUpdateDate && // Only after AI responds
+        currentMessages.length >= 2 && // Requires both user and assistant message
+        (existingIndex === -1 || currentList[existingIndex].title === "New Chat"); // Either new chat or title not yet set
 
       if (existingIndex > -1) {
         title = currentList[existingIndex].title;
         date = shouldUpdateDate ? Date.now() : currentList[existingIndex].date;
-
-        // Only generate title once: if title is "New Chat", have 2+ messages, and this is the first time (only when AI just responded)
-        if (title === "New Chat" && currentMessages.length >= 2 && shouldUpdateDate) {
+        
+        if (shouldGenerateTitle) {
           title = await generateChatTitle(currentMessages, selectedModelId);
         }
-      } else if (currentMessages.length > 0) {
-        // New chat - only generate if we have 2+ messages and shouldUpdateDate is true (meaning AI just responded)
-        if (currentMessages.length >= 2 && shouldUpdateDate) {
-          title = await generateChatTitle(currentMessages, selectedModelId);
-        } else {
-          title = "New Chat";
-        }
+      } else if (shouldGenerateTitle) {
+        title = await generateChatTitle(currentMessages, selectedModelId);
       }
-
-      const newMeta: ChatMetadata = { id: chatId, title, date };
+      
+      const newMeta: ChatMetadata = { id: targetChatId, title, date };
+      
       const updatedList =
         existingIndex > -1
           ? currentList.map((c, i) => (i === existingIndex ? newMeta : c))
@@ -118,8 +119,13 @@ Title:`,
       
       return sortedList;
     },
-    [chatId, getChatMetadata, generateChatTitle, selectedModelId] 
+    [getChatMetadata, generateChatTitle, selectedModelId] 
   );
+  
+  // Expose a wrapper to match the original function signature for current chat usage
+  const saveCurrentChatHistory = useCallback((currentMessages: Message[], shouldUpdateDate = false) => {
+      return saveHistory(currentMessages, chatId, shouldUpdateDate);
+  }, [chatId, saveHistory]);
 
-  return { getChatMetadata, saveHistory };
+  return { getChatMetadata, saveHistory: saveCurrentChatHistory };
 };

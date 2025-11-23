@@ -9,6 +9,7 @@ interface UseChatSubmitProps {
   setIsLoading: (loading: boolean) => void;
   setGeneratingChatId: (id: string | null) => void;
   chatIdRef: MutableRefObject<string>;
+  saveHistoryToTarget: (msgs: Message[], targetChatId: string, shouldUpdateDate: boolean) => Promise<any>;
 }
 
 export const useChatSubmit = ({
@@ -19,6 +20,7 @@ export const useChatSubmit = ({
   setIsLoading,
   setGeneratingChatId,
   chatIdRef,
+  saveHistoryToTarget,
 }: UseChatSubmitProps) => {
   const onSubmit = useCallback(
     async (e: React.FormEvent, input: string, setInput: (val: string) => void) => {
@@ -37,9 +39,9 @@ export const useChatSubmit = ({
         content: userText,
       };
 
-      // Optimistically add user message
       if (submittingChatId === chatIdRef.current) {
         setMessages((prev) => [...prev, userMsg]);
+        await saveHistory([...currentHistory, userMsg], false); 
       }
 
       setIsLoading(true);
@@ -47,9 +49,15 @@ export const useChatSubmit = ({
 
       const aiMsgId = `${Date.now() + 1}`;
       
-      // Track distinct parts of the response
       let aiMsgReasoning = "";
       let aiMsgContent = "";
+      
+      let backgroundMessages: Message[] | null = null;
+      if (submittingChatId !== chatIdRef.current) {
+         backgroundMessages = [...currentHistory, userMsg];
+         // Initial background save of user message
+         saveHistoryToTarget(backgroundMessages, submittingChatId, false);
+      }
 
       try {
         const response = await fetch("/api/chat", {
@@ -69,6 +77,8 @@ export const useChatSubmit = ({
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        
+        let messagesToSave: Message[] = [...currentHistory, userMsg];
 
         while (true) {
           const { done, value } = await reader.read();
@@ -85,22 +95,18 @@ export const useChatSubmit = ({
                  const delta = json.choices?.[0]?.delta;
 
                  if (delta) {
-                    // Capture reasoning tokens if they exist
                     if (delta.reasoning_content) {
                         aiMsgReasoning += delta.reasoning_content;
                     }
-                    // Capture standard content tokens
                     if (delta.content) {
                         aiMsgContent += delta.content;
                     }
                  }
               } catch (e) {
-                 // Ignore parse errors for partial chunks
               }
             }
           }
 
-          // Construct the full message string using <think> tags for the UI parser
           let fullMessage = "";
           if (aiMsgReasoning) {
              fullMessage += `<think>${aiMsgReasoning}`;
@@ -114,19 +120,35 @@ export const useChatSubmit = ({
           if (submittingChatId === chatIdRef.current) {
             setMessages((prev) => {
               const exists = prev.some((m) => m.id === aiMsgId);
+              let updatedMessages;
+
               if (exists) {
-                return prev.map((m) =>
+                updatedMessages = prev.map((m) =>
                   m.id === aiMsgId ? { ...m, content: fullMessage } : m
                 );
               } else {
-                return [
+                updatedMessages = [
                   ...prev,
                   { id: aiMsgId, role: "assistant", content: fullMessage },
                 ];
               }
+              messagesToSave = updatedMessages; 
+              return updatedMessages;
             });
+            
+            saveHistory(messagesToSave, false);
           } else {
-            updateLocalStorage(submittingChatId, userMsg, aiMsgId, fullMessage);
+            // Update storage for background chat
+            if (backgroundMessages) {
+                const existingAiMsgIndex = backgroundMessages.findIndex((m) => m.id === aiMsgId);
+                if (existingAiMsgIndex > -1) {
+                    backgroundMessages[existingAiMsgIndex].content = fullMessage;
+                } else {
+                    backgroundMessages.push({ id: aiMsgId, role: "assistant", content: fullMessage });
+                }
+                // Save partial result for background chat
+                saveHistoryToTarget(backgroundMessages, submittingChatId, false);
+            }
           }
         }
 
@@ -137,14 +159,24 @@ export const useChatSubmit = ({
         }
         finalMessage += aiMsgContent;
 
-        await finalizeChat(submittingChatId, chatIdRef, aiMsgId, finalMessage, userMsg, setMessages, saveHistory);
+        await finalizeChat(
+            submittingChatId, 
+            chatIdRef, 
+            aiMsgId, 
+            finalMessage, 
+            userMsg, 
+            setMessages, 
+            saveHistory, 
+            saveHistoryToTarget,
+            backgroundMessages
+        );
 
       } catch (err) {
         console.error("Generation interrupted:", err);
         
         // Construct partial error message
         let partialMsg = "";
-        if (aiMsgReasoning) partialMsg += `<think>${aiMsgReasoning}`; // Leave open to show incomplete thought
+        if (aiMsgReasoning) partialMsg += `<think>${aiMsgReasoning}`;
         if (aiMsgContent) {
              if (aiMsgReasoning) partialMsg += `</think>`; 
              partialMsg += aiMsgContent;
@@ -163,49 +195,37 @@ export const useChatSubmit = ({
                  if(exists) {
                      newHistory = prev.map(m => m.id === aiMsgId ? {...m, content: finalContent} : m);
                  } else {
-                     newHistory = [...prev, { id: aiMsgId, role: "assistant", content: finalContent }];
+                     // Add user message if optimistic update failed
+                     const userMsgExists = prev.some(m => m.id === userMsg.id);
+                     newHistory = [...(userMsgExists ? prev : [...prev, userMsg]), { id: aiMsgId, role: "assistant", content: finalContent }];
                  }
                  saveHistory(newHistory, true);
                  return newHistory;
              });
         } else {
-             updateLocalStorage(submittingChatId, userMsg, aiMsgId, finalContent);
+             
+             if (backgroundMessages) {
+                const existingAiMsgIndex = backgroundMessages.findIndex((m) => m.id === aiMsgId);
+                if (existingAiMsgIndex > -1) {
+                    backgroundMessages[existingAiMsgIndex].content = finalContent;
+                } else {
+                    backgroundMessages.push({ id: aiMsgId, role: "assistant", content: finalContent });
+                }
+                saveHistoryToTarget(backgroundMessages, submittingChatId, true);
+             }
         }
       } finally {
         setIsLoading(false);
         setGeneratingChatId(null);
       }
     },
-    [selectedModelId, messages, setMessages, saveHistory, setIsLoading, setGeneratingChatId, chatIdRef]
+    [selectedModelId, messages, setMessages, saveHistory, setIsLoading, setGeneratingChatId, chatIdRef, saveHistoryToTarget]
   );
 
   return { onSubmit };
 };
 
-/* --- Helpers for Background Storage Updates --- */
-
-function updateLocalStorage(chatId: string, userMsg: Message, aiMsgId: string, content: string) {
-    const savedChat = localStorage.getItem(`chat_${chatId}`);
-    if (savedChat) {
-      const chatMessages = JSON.parse(savedChat) as Message[];
-      
-      if (!chatMessages.some(m => m.id === userMsg.id)) {
-         chatMessages.push(userMsg);
-      }
-
-      const existingAiMsg = chatMessages.find((m) => m.id === aiMsgId);
-      if (existingAiMsg) {
-        existingAiMsg.content = content;
-      } else {
-        chatMessages.push({
-          id: aiMsgId,
-          role: "assistant",
-          content: content,
-        });
-      }
-      localStorage.setItem(`chat_${chatId}`, JSON.stringify(chatMessages));
-    }
-}
+/* --- Helpers for Finalization --- */
 
 async function finalizeChat(
     chatId: string, 
@@ -214,26 +234,34 @@ async function finalizeChat(
     finalContent: string, 
     userMsg: Message,
     setMessages: any, 
-    saveHistory: any
+    saveHistory: any, // For current chat
+    saveHistoryToTarget: any, // For background chat
+    backgroundMessages: Message[] | null // The message array being built in the background
 ) {
     const finalMsg = { id: aiMsgId, role: "assistant" as const, content: finalContent };
 
     if (chatId === chatIdRef.current) {
         setMessages((prev: Message[]) => {
-            const final = prev.map(m => m.id === aiMsgId ? finalMsg : m);
-            saveHistory(final, true);
+            // Ensure both user and assistant message are present before saving
+            const userMsgExists = prev.some(m => m.id === userMsg.id);
+            let final = prev;
+            if (!userMsgExists) {
+                // Should not happen if optimistic update worked, but for safety
+                final = [...prev, userMsg]; 
+            }
+            final = final.map(m => m.id === aiMsgId ? finalMsg : m);
+            saveHistory(final, true); // true to generate title/update date
             return final;
         });
     } else {
-        updateLocalStorage(chatId, userMsg, aiMsgId, finalContent);
-        const allChatsStr = localStorage.getItem("all_chats");
-        if(allChatsStr) {
-            const allChats = JSON.parse(allChatsStr);
-            const chatIndex = allChats.findIndex((c: any) => c.id === chatId);
-            if(chatIndex > -1) {
-                allChats[chatIndex].date = Date.now();
-                localStorage.setItem("all_chats", JSON.stringify(allChats.sort((a: any, b: any) => b.date - a.date)));
-            }
+        if (backgroundMessages) {
+             const existingAiMsgIndex = backgroundMessages.findIndex((m) => m.id === aiMsgId);
+             if (existingAiMsgIndex > -1) {
+                 backgroundMessages[existingAiMsgIndex].content = finalContent;
+             } else {
+                 backgroundMessages.push(finalMsg);
+             }
+             saveHistoryToTarget(backgroundMessages, chatId, true); // true to generate title/update date
         }
     }
 }
