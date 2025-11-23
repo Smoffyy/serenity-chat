@@ -11,7 +11,7 @@ This project aims to make a very aestetically pleasing front end UI, **fully ope
 
 - **Real-time History**: All chat sessions and history are stored locally in the browser's localStorage.
 
-- **Theming****: Multiple light and dark themes (Dark, Light, Ect.).
+- **Theming**: Multiple light and dark themes (Dark, Light, Ect.).
 
 - **Advanced UI**: Smooth animations powered by Framer Motion, syntax highlighting for code blocks, and KaTeX support for math/LaTeX rendering.
 
