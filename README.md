@@ -1,6 +1,6 @@
 # Serenity Chat (UI)
 
-This project aims to make a very aestetically pleasing front end UI for users using an openai-compatable API. Also this project has been **heavily vibe-coded**, as I've been wanting to use my local AI experts.
+This project aims to make a very aestetically pleasing front end UI, **fully opened sourced** for anyone to edit, refurbish, sell, for users using an openai-compatable API. Also this project has been **heavily vibe-coded**, as I've been wanting to use my local AI experts.
 
 ![alt text](image-1.png)
 
