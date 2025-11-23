@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import type { Message, ChatMetadata } from "../types";
 
-// FIXED: Accepts selectedModelId
 export const useChatHistory = (chatId: string, selectedModelId: string) => {
   const getChatMetadata = useCallback((): ChatMetadata[] => {
     try {
@@ -11,7 +10,6 @@ export const useChatHistory = (chatId: string, selectedModelId: string) => {
     }
   }, []);
 
-  // FIXED: Accepts modelId argument
   const generateChatTitle = useCallback(
     async (messages: Message[], modelId: string): Promise<string> => {
       const userMessage = messages.find((m) => m.role === "user");
@@ -36,7 +34,6 @@ Rules:
 Title:`,
               },
             ],
-            // FIXED: Use the passed modelId, or fallback
             model: modelId || "", 
           }),
         });
@@ -99,13 +96,11 @@ Title:`,
 
         // Only generate title once: if title is "New Chat", have 2+ messages, and this is the first time (only when AI just responded)
         if (title === "New Chat" && currentMessages.length >= 2 && shouldUpdateDate) {
-          // FIXED: Pass selectedModelId
           title = await generateChatTitle(currentMessages, selectedModelId);
         }
       } else if (currentMessages.length > 0) {
         // New chat - only generate if we have 2+ messages and shouldUpdateDate is true (meaning AI just responded)
         if (currentMessages.length >= 2 && shouldUpdateDate) {
-          // FIXED: Pass selectedModelId
           title = await generateChatTitle(currentMessages, selectedModelId);
         } else {
           title = "New Chat";
@@ -123,7 +118,6 @@ Title:`,
       
       return sortedList;
     },
-    // FIXED: Add selectedModelId to dependencies
     [chatId, getChatMetadata, generateChatTitle, selectedModelId] 
   );
 

@@ -48,7 +48,6 @@ const MemoizedMessageBubble = memo(MessageBubble, (prev, next) => {
     prev.content === next.content &&
     prev.role === next.role &&
     prev.isGenerating === next.isGenerating
-    // Removed showCursor check
   );
 });
 
@@ -88,7 +87,6 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                   m.id === messages[messages.length - 1]?.id &&
                   m.role === "assistant"
                 }
-                // Removed showCursor prop
                 // Pass animationsEnabled down if MessageBubble needs it (it doesn't currently use it for entry)
               />
             ))}

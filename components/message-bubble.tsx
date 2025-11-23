@@ -16,14 +16,12 @@ import "katex/dist/katex.min.css";
 
 import "highlight.js/styles/atom-one-dark.css";
 
-// --- New Code Block Copy Component ---
 interface CodeBlockProps {
   children: React.ReactNode;
   className?: string;
   inline?: boolean;
 }
 
-// Function to extract raw text content from React children
 const getCodeContent = (children: React.ReactNode): string => {
     if (Array.isArray(children)) {
         return children.map(child => {
@@ -93,7 +91,6 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ children, className, inline, ...p
     </div>
   );
 };
-// ------------------------------------
 
 
 interface ReasoningProps {
@@ -145,7 +142,6 @@ const Reasoning: React.FC<ReasoningProps> = ({ content, isThinking }) => {
                 remarkPlugins={[remarkGfm, remarkBreaks]}
                 rehypePlugins={[rehypeHighlight]}
                 components={{
-                  // FIX: Use div instead of p to prevent nesting errors if code blocks appear
                   p: ({ children }) => (
                     <div className="mb-2 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
                       {children}
@@ -233,7 +229,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
         rehypePlugins={[rehypeHighlight, rehypeKatex]}
         components={{
-          // FIX: Use div to avoid nesting errors (p > div, p > pre)
           p: ({ children }) => (
             <div className="mb-3 last:mb-0 leading-relaxed whitespace-pre-wrap break-words block">
               {children}

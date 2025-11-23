@@ -1,17 +1,13 @@
 import type { Transition, Variants } from "framer-motion";
 
-// Helper to determine effective transition based on enabled state and speed
 export const getTransition = (enabled: boolean, speed: number): Transition => {
   if (!enabled) {
     return { duration: 0 };
   }
 
-  // Base values (speed = 1)
   const baseStiffness = 400;
   const baseDamping = 25;
 
-  // Adjust based on speed factor (higher speed = higher stiffness, lower damping)
-  // Limiting speed influence to avoid breaking physics
   const effectiveSpeed = Math.max(0.5, Math.min(speed, 2));
 
   return {

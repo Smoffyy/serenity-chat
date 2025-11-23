@@ -111,7 +111,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {/* Use standard div if animations disabled for instant switch */}
                   {settings.animationsEnabled ? (
                     <motion.div
-                      // FIXED: Use bg-[var(--bg-primary)] for contrast against white accent
                       className="w-4 h-4 rounded-full shadow-sm bg-[var(--bg-primary)]"
                       layout
                       transition={transition}
