@@ -122,7 +122,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 ? "Generating response..."
                 : isInitialState
                 ? "How can I help you today?"
-                : "Message..."
+                : "Send a Message."
             }
             rows={1}
             wrap="off"
