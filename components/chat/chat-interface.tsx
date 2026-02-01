@@ -117,7 +117,7 @@ export default function ChatInterface() {
   /* ---------- SYNC WITH URL ---------- */
   useEffect(() => {
     if (urlChatId) {
-      setChatId(urlChatId);
+      setChatId(prev => urlChatId);
       chatIdRef.current = urlChatId;
 
       shouldAutoScrollRef.current = true;
@@ -175,7 +175,7 @@ export default function ChatInterface() {
       try {
         const saved = localStorage.getItem(`chat_${urlChatId}`);
         if (saved) {
-          setMessages(JSON.parse(saved));
+          setMessages(prev => JSON.parse(saved));
         } else {
           setMessages([]);
         }
@@ -356,7 +356,7 @@ export default function ChatInterface() {
 
   const handleKeyUp = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Shift") {
-      // Handle if needed
+      setIsShiftPressed(e.shiftKey);
     }
   }, []);
 
@@ -409,7 +409,7 @@ export default function ChatInterface() {
 
   // Initialize app state and load settings/models
   useEffect(() => {
-    setChatList(getChatMetadata());
+    setChatList(prev => getChatMetadata());
 
     try {
       const savedDefaultModel = localStorage.getItem("default_model") || "";

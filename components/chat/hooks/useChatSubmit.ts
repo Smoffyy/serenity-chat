@@ -341,7 +341,7 @@ export const useChatSubmit = ({
       setIsLoading(false);
       setGeneratingChatId(null);
     }
-  }, [setIsLoading, setGeneratingChatId]);
+  }, [setIsLoading, setGeneratingChatId, chatIdRef]);
 
   return { onSubmit, onStop };
 };
